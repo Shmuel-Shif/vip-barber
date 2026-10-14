@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#070707">
-  <meta name="description" content="הבחירות להזמנה נשמרו. השלב הבא עדיין לא נבנה.">
-  <title>המשך ההזמנה — זאבי הנאו - VIP</title>
+  <meta name="description" content="בחירת תאריך ושעה להדגמה. התור אינו מאושר.">
+  <title>בחר תאריך ושעה — זאבי הנאו - VIP</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
@@ -33,12 +34,20 @@
     </nav>
   </header>
   <main id="content">
-    <section class="party" aria-labelledby="saved-title">
-      <p class="party__kicker">הזמנה</p>
-      <h1 id="saved-title">הבחירות נשמרו</h1>
-      <p class="party__lead">השלב הבא בהזמנה עדיין לא נבנה. לא נשלח דבר לשרת, ולא נשמרו שם, טלפון או כתובת.</p>
-      <div id="booking-saved" class="party__summary"></div>
-      <a class="text-link" href="booking.html">חזרה לכמות האנשים</a>
+    <section class="cal" id="booking-calendar" aria-labelledby="cal-title">
+      <h1 id="cal-title">בחר תאריך ושעה</h1>
+      <p class="cal__hint">שעות הדגמה זמניות, לא זמינות קבועה.</p>
+      <div class="cal__nav">
+        <button type="button" id="cal-prev" aria-label="החודש הקודם">‹</button>
+        <h2 id="cal-label"></h2>
+        <button type="button" id="cal-next" aria-label="החודש הבא">›</button>
+      </div>
+      <div class="cal__weekdays" aria-hidden="true">
+        <span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span>
+      </div>
+      <div id="cal-grid" class="cal__grid" role="grid" aria-labelledby="cal-label"></div>
+      <div id="cal-times" class="cal__times"></div>
+      <button type="button" class="btn btn--gold cal__continue" id="cal-continue" disabled>המשך</button>
     </section>
   </main>
   <script src="js/demo-data.js"></script>

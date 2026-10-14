@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="הדגמה מקומית לניהול זמינות שבועית. לא מחובר להזמנות.">
+  <title>ניהול זמינות — זאבי הנאו - VIP</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">דלג לתוכן</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="VIP, דף הבית">
+      <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
+    </a>
+    <p class="admin-mark">ניהול זמינות</p>
+  </header>
+  <main id="content">
+    <section class="avail" id="week-plan" aria-labelledby="avail-title">
+      <h1 id="avail-title">זמינות שבועית</h1>
+      <p class="avail__note">הדגמה מקומית בלבד. השמירה אינה מחוברת להזמנות של לקוחות.</p>
+      <div class="cal__nav">
+        <button type="button" id="week-prev">השבוע הקודם</button>
+        <h2 id="week-label"></h2>
+        <button type="button" id="week-next">השבוע הבא</button>
+      </div>
+      <div id="week-days" class="avail__days"></div>
+      <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השבוע</button>
+      <p id="week-status" class="cal__status" role="status"></p>
+    </section>
+  </main>
+  <script src="js/demo-data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

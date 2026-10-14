@@ -119,7 +119,7 @@
   }
 
   function readBookingDraft() {
-    var empty = { serviceId: "", adults: 0, children: 0, vip: 0, beards: 0 };
+    var empty = { serviceId: "", adults: 0, children: 0, vip: 0, beards: 0, date: "", time: "" };
     try {
       var raw = sessionStorage.getItem(storageKey);
       if (!raw) {
@@ -131,7 +131,9 @@
         adults: wholeCount(data.adults),
         children: wholeCount(data.children),
         vip: wholeCount(data.vip),
-        beards: wholeCount(data.beards)
+        beards: wholeCount(data.beards),
+        date: typeof data.date === "string" ? data.date : "",
+        time: typeof data.time === "string" ? data.time : ""
       };
     } catch (error) {
       return empty;
@@ -150,7 +152,9 @@
         adults: wholeCount(draft.adults),
         children: wholeCount(draft.children),
         vip: wholeCount(draft.vip),
-        beards: beards
+        beards: beards,
+        date: typeof draft.date === "string" ? draft.date : "",
+        time: typeof draft.time === "string" ? draft.time : ""
       }));
     } catch (error) {
       return;
@@ -470,4 +474,339 @@
   });
 
   paint();
+})();
+
+(function () {
+  "use strict";
+
+  var grid = document.getElementById("cal-grid");
+  var booking = window.VIP_BOOKING;
+  if (!grid || !booking) {
+    return;
+  }
+
+  var label = document.getElementById("cal-label");
+  var times = document.getElementById("cal-times");
+  var prev = document.getElementById("cal-prev");
+  var next = document.getElementById("cal-next");
+  var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  var schedule = window.VIP_SCHEDULE || { standing: {} };
+  var draft = booking.read();
+  var continueButton = document.getElementById("cal-continue");
+  var today = new Date();
+  var todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  var view = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+  function two(number) {
+    return number < 10 ? "0" + number : String(number);
+  }
+
+  function iso(date) {
+    return date.getFullYear() + "-" + two(date.getMonth() + 1) + "-" + two(date.getDate());
+  }
+
+  function parse(value) {
+    var parts = String(value || "").split("-");
+    if (parts.length !== 3) {
+      return null;
+    }
+    var year = Number(parts[0]);
+    var month = Number(parts[1]);
+    var day = Number(parts[2]);
+    var date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+      return null;
+    }
+    return date;
+  }
+
+  function isClosed(date) {
+    var rule = schedule.standing ? schedule.standing[String(date.getDay())] : null;
+    return !!(rule && rule.status === "closed");
+  }
+
+  function slotsFor(date) {
+    if (!date || isClosed(date) || !schedule.standing) {
+      return [];
+    }
+    var rule = schedule.standing[String(date.getDay())];
+    if (!rule || rule.status !== "hours" || !rule.slots) {
+      return [];
+    }
+    return rule.slots.slice();
+  }
+
+  var saved = parse(draft.date);
+  if (!saved || saved < todayStart || isClosed(saved)) {
+    draft.date = "";
+    draft.time = "";
+    booking.write(draft);
+  } else {
+    view = new Date(saved.getFullYear(), saved.getMonth(), 1);
+    if (slotsFor(saved).indexOf(draft.time) === -1) {
+      draft.time = "";
+      booking.write(draft);
+    }
+  }
+
+  function save() {
+    booking.write(draft);
+  }
+
+  function renderTimes(date) {
+    times.textContent = "";
+    if (!date) {
+      return;
+    }
+    var slots = slotsFor(date);
+    if (!slots.length) {
+      return;
+    }
+    var row = document.createElement("div");
+    row.className = "cal__slots";
+    slots.forEach(function (slot) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "cal__slot";
+      button.textContent = slot;
+      button.setAttribute("aria-pressed", draft.time === slot ? "true" : "false");
+      button.addEventListener("click", function () {
+        draft.time = slot;
+        save();
+        render();
+      });
+      row.appendChild(button);
+    });
+    times.appendChild(row);
+  }
+
+  function render() {
+    var year = view.getFullYear();
+    var month = view.getMonth();
+    label.textContent = months[month] + " " + year;
+    prev.disabled = year === todayStart.getFullYear() && month === todayStart.getMonth();
+    grid.textContent = "";
+
+    var first = new Date(year, month, 1);
+    var days = new Date(year, month + 1, 0).getDate();
+    var offset = first.getDay();
+    var index;
+    for (index = 0; index < offset; index += 1) {
+      var blank = document.createElement("span");
+      blank.className = "cal__blank";
+      grid.appendChild(blank);
+    }
+
+    for (index = 1; index <= days; index += 1) {
+      var date = new Date(year, month, index);
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "cal__day";
+      button.textContent = String(index);
+      button.setAttribute("aria-label", index + " ב" + months[month] + " " + year);
+      if (date < todayStart || isClosed(date)) {
+        button.disabled = true;
+        if (isClosed(date)) {
+          button.classList.add("is-closed");
+        }
+      }
+      if (iso(date) === iso(todayStart)) {
+        button.classList.add("is-today");
+      }
+      if (draft.date === iso(date)) {
+        button.classList.add("is-selected");
+        button.setAttribute("aria-pressed", "true");
+      } else {
+        button.setAttribute("aria-pressed", "false");
+      }
+      button.addEventListener("click", function (event) {
+        var chosen = new Date(year, month, Number(event.currentTarget.textContent));
+        var nextIso = iso(chosen);
+        if (draft.date !== nextIso) {
+          draft.time = "";
+        }
+        draft.date = nextIso;
+        if (slotsFor(chosen).indexOf(draft.time) === -1) {
+          draft.time = "";
+        }
+        save();
+        render();
+      });
+      grid.appendChild(button);
+    }
+
+    renderTimes(parse(draft.date));
+    if (continueButton) {
+      var ready = !!(draft.date && draft.time);
+      continueButton.disabled = !ready;
+      continueButton.setAttribute("aria-disabled", ready ? "false" : "true");
+    }
+  }
+
+  prev.addEventListener("click", function () {
+    view = new Date(view.getFullYear(), view.getMonth() - 1, 1);
+    render();
+  });
+  next.addEventListener("click", function () {
+    view = new Date(view.getFullYear(), view.getMonth() + 1, 1);
+    render();
+  });
+  render();
+})();
+
+(function () {
+  "use strict";
+
+  var root = document.getElementById("week-days");
+  var schedule = window.VIP_SCHEDULE;
+  if (!root || !schedule) {
+    return;
+  }
+
+  var label = document.getElementById("week-label");
+  var status = document.getElementById("week-status");
+  var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  var today = new Date();
+  var cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - cursor.getDay());
+  var week = {};
+
+  function two(number) {
+    return number < 10 ? "0" + number : String(number);
+  }
+
+  function iso(date) {
+    return date.getFullYear() + "-" + two(date.getMonth() + 1) + "-" + two(date.getDate());
+  }
+
+  function readStore() {
+    try {
+      var raw = localStorage.getItem(schedule.storageKey);
+      var data = raw ? JSON.parse(raw) : {};
+      return data && data.weeks ? data.weeks : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function blankWeek() {
+    var days = {};
+    schedule.weekdays.forEach(function (day) {
+      days[day.id] = { status: "unset", start: "", end: "" };
+    });
+    return days;
+  }
+
+  function loadWeek() {
+    var stored = readStore()[iso(cursor)];
+    week = blankWeek();
+    if (!stored) {
+      return;
+    }
+    schedule.weekdays.forEach(function (day) {
+      var item = stored[day.id];
+      if (!item) {
+        return;
+      }
+      if (item.status === "closed" || item.status === "hours" || item.status === "unset") {
+        week[day.id].status = item.status;
+      }
+      week[day.id].start = typeof item.start === "string" ? item.start : "";
+      week[day.id].end = typeof item.end === "string" ? item.end : "";
+    });
+  }
+
+  function render() {
+    var end = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6);
+    label.textContent = cursor.getDate() + " ב" + months[cursor.getMonth()] + " – " + end.getDate() + " ב" + months[end.getMonth()] + " " + end.getFullYear();
+    root.textContent = "";
+    schedule.weekdays.forEach(function (day) {
+      var date = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + Number(day.id));
+      var card = document.createElement("article");
+      card.className = "avail__day";
+
+      var title = document.createElement("h2");
+      title.textContent = "יום " + day.label + " " + date.getDate() + "." + two(date.getMonth() + 1);
+      card.appendChild(title);
+
+      var modes = document.createElement("div");
+      modes.className = "avail__modes";
+      [
+        ["unset", "טרם הוגדר"],
+        ["closed", "לא פנוי"],
+        ["hours", "פנוי"]
+      ].forEach(function (mode) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = mode[1];
+        button.setAttribute("aria-pressed", week[day.id].status === mode[0] ? "true" : "false");
+        button.addEventListener("click", function () {
+          week[day.id].status = mode[0];
+          render();
+        });
+        modes.appendChild(button);
+      });
+      card.appendChild(modes);
+
+      var fields = document.createElement("div");
+      fields.className = "avail__times";
+      [["start", "שעת התחלה"], ["end", "שעת סיום"]].forEach(function (field) {
+        var wrap = document.createElement("label");
+        wrap.textContent = field[1];
+        var input = document.createElement("input");
+        input.type = "time";
+        input.value = week[day.id][field[0]];
+        input.disabled = week[day.id].status !== "hours";
+        input.addEventListener("change", function () {
+          week[day.id][field[0]] = input.value;
+        });
+        wrap.appendChild(input);
+        fields.appendChild(wrap);
+      });
+      card.appendChild(fields);
+      root.appendChild(card);
+    });
+  }
+
+  document.getElementById("week-prev").addEventListener("click", function () {
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 7);
+    loadWeek();
+    status.textContent = "";
+    render();
+  });
+  document.getElementById("week-next").addEventListener("click", function () {
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 7);
+    loadWeek();
+    status.textContent = "";
+    render();
+  });
+  document.getElementById("week-save").addEventListener("click", function () {
+    var invalid = false;
+    schedule.weekdays.forEach(function (day) {
+      var item = week[day.id];
+      if (item.status === "hours" && (!item.start || !item.end || item.end <= item.start)) {
+        invalid = true;
+      }
+    });
+    if (invalid) {
+      status.textContent = "ביום פנוי צריך שעת התחלה ושעת סיום מאוחרת ממנה.";
+      return;
+    }
+    var store = readStore();
+    store[iso(cursor)] = week;
+    try {
+      localStorage.setItem(schedule.storageKey, JSON.stringify({
+        temporary: true,
+        syncedWithBookings: false,
+        weeks: store
+      }));
+    } catch (error) {
+      status.textContent = "לא ניתן לשמור במכשיר זה.";
+      return;
+    }
+    status.textContent = "השבוע נשמר במכשיר זה בלבד. יומן ההזמנות של הלקוחות לא עודכן.";
+  });
+
+  loadWeek();
+  render();
 })();

@@ -1,9 +1,10 @@
-var CACHE_NAME = "vip-shell-v25";
+var CACHE_NAME = "vip-shell-v37";
 var SHELL = [
   "./index.html",
   "./services.html",
   "./booking.html",
   "./booking-next.html",
+  "./admin.html",
   "./about.html",
   "./orders.html",
   "./style.css",
@@ -12,7 +13,6 @@ var SHELL = [
   "./manifest.webmanifest",
   "./assets/tools.jpg",
   "./assets/logo/logo.png",
-  "./assets/favicon.svg",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
   "./assets/icon-maskable-512.png"
