@@ -18,14 +18,14 @@ window.VIP_DEMO = {
       id: "mens-haircut",
       name: "תספורת גברים",
       summary: "תספורת בהתאמה אישית.",
-      priceIls: 70,
+      priceIls: 80,
       temporaryPrice: true
     },
     {
       id: "kids-haircut",
       name: "תספורת ילדים",
       summary: "תספורת לילדים באווירה נעימה, עם תוצאה מדויקת לכל גיל.",
-      priceIls: 55,
+      priceIls: 60,
       temporaryPrice: true
     },
     {
