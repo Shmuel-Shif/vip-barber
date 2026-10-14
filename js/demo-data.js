@@ -36,16 +36,41 @@ window.VIP_DEMO = {
       temporaryPrice: true,
       addon: true
     }
-  ]
+  ],
+  priceError: "",
+  onUpdate: null,
+  applyServer: function (rows) {
+    var catalog = window.VIP_DEMO;
+    (rows || []).forEach(function (row) {
+      catalog.services.forEach(function (service) {
+        if (service.id !== row.id || row.active === false) {
+          return;
+        }
+        if (row.price_ils !== null && row.price_ils !== undefined && !isNaN(Number(row.price_ils))) {
+          service.priceIls = Number(row.price_ils);
+        }
+        if (row.minutes !== null && row.minutes !== undefined && !isNaN(Number(row.minutes))) {
+          service.minutes = Number(row.minutes);
+        }
+        if (row.name) {
+          service.name = row.name;
+        }
+      });
+    });
+    catalog.priceError = "";
+    if (catalog.onUpdate) {
+      catalog.onUpdate();
+    }
+  }
 };
 
 /**
- * Local availability for this device only.
- * syncedWithBookings stays false: nothing is shared between devices or a server.
- * The customer calendar on this same device does read standing hours, week overrides, and orders.
+ * Hours and busy spans.
+ * After a successful server load, remote replaces the device copy for the calendar.
+ * The device copy stays in localStorage for the temporary development door.
  * standing — the weekly template, reused every week.
  * weeks — one Sunday-keyed override. It does not change standing.
- * exceptions — an older date-level override. It wins for that date until the week is saved again.
+ * exceptions — a date-level override. It wins for that date until the week is saved again.
  * Day status: unset, closed, or hours. Each haircut slot is 30 minutes.
  * Default template: Sunday–Thursday 17:00–21:00, Friday 09:00–12:00, Saturday closed.
  */
@@ -166,17 +191,27 @@ window.VIP_SCHEDULE = {
     }));
   }
 
+  function activeStore() {
+    if (schedule.remote) {
+      return schedule.remote;
+    }
+    return readStore();
+  }
+
   function standingDay(dayId, store) {
-    var source = store || readStore();
+    var source = store || activeStore();
     var saved = source.standing && source.standing[String(dayId)];
     if (saved) {
       return normalizeDay(saved);
+    }
+    if (schedule.remote && source.standing === schedule.remote.standing) {
+      return normalizeDay({ status: "closed" });
     }
     return normalizeDay(schedule.standing[String(dayId)]);
   }
 
   function dayFor(date) {
-    var store = readStore();
+    var store = activeStore();
     var key = iso(date);
     var dayId = String(date.getDay());
     if (store.exceptions[key]) {
@@ -241,11 +276,51 @@ window.VIP_SCHEDULE = {
     return map;
   }
 
+  function jerusalemOffset(utcMs) {
+    var parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Jerusalem",
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    }).formatToParts(new Date(utcMs));
+    var map = {};
+    parts.forEach(function (part) {
+      map[part.type] = part.value;
+    });
+    var asUtc = Date.UTC(Number(map.year), Number(map.month) - 1, Number(map.day), Number(map.hour) % 24, Number(map.minute), Number(map.second));
+    return asUtc - utcMs;
+  }
+
+  function slotMoment(date, slot) {
+    var at = minutes(slot);
+    if (!date || at === null) {
+      return null;
+    }
+    var utcGuess = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(at / 60), at % 60, 0, 0);
+    return new Date(utcGuess - jerusalemOffset(utcGuess));
+  }
+
+  function serverTaken(date, slot) {
+    var ranges = schedule.busyRanges && schedule.busyRanges[iso(date)];
+    var start = slotMoment(date, slot);
+    if (!ranges || !start) {
+      return false;
+    }
+    var end = start.getTime() + 30 * 60 * 1000;
+    return ranges.some(function (range) {
+      return start.getTime() < range.end && end > range.start;
+    });
+  }
+
   function openSlots(date, options) {
     var opts = options || {};
     var day = opts.day || dayFor(date);
     var slots = [];
-    if (!date || !day || day.status !== "hours") {
+    if (schedule.unavailable || !date || !day || day.status !== "hours") {
       return slots;
     }
     slots = slotsBetween(day.start, day.end).filter(function (slot) {
@@ -263,10 +338,16 @@ window.VIP_SCHEDULE = {
       }
     }
     if (!opts.ignoreTaken) {
-      var busy = taken(iso(date));
-      slots = slots.filter(function (slot) {
-        return !busy[slot];
-      });
+      if (schedule.remote) {
+        slots = slots.filter(function (slot) {
+          return !serverTaken(date, slot);
+        });
+      } else {
+        var busy = taken(iso(date));
+        slots = slots.filter(function (slot) {
+          return !busy[slot];
+        });
+      }
     }
     return slots;
   }
@@ -287,6 +368,66 @@ window.VIP_SCHEDULE = {
     return openSlots(date).indexOf(time) !== -1;
   }
 
+  function clockText(value) {
+    var text = String(value || "");
+    return text.length >= 5 ? text.slice(0, 5) : text;
+  }
+
+  function dayFromRow(row) {
+    return normalizeDay({
+      status: row.status,
+      start: clockText(row.start_time),
+      end: clockText(row.end_time),
+      breaks: (row.breaks || []).map(function (item) {
+        return { start: clockText(item && item.start), end: clockText(item && item.end) };
+      }),
+      blocked: (row.blocked || []).map(clockText)
+    });
+  }
+
+  schedule.remote = null;
+  schedule.busyRanges = {};
+  schedule.unavailable = false;
+  schedule.loadError = "";
+  schedule.travelMinutes = null;
+  schedule.applyRemote = function (payload, busyRows) {
+    var standing = {};
+    var weeks = {};
+    var exceptions = {};
+    var ranges = {};
+    (payload.weekly || []).forEach(function (row) {
+      standing[String(row.weekday)] = dayFromRow(row);
+    });
+    (payload.weeks || []).forEach(function (row) {
+      var key = String(row.week_start).slice(0, 10);
+      if (!weeks[key]) {
+        weeks[key] = {};
+      }
+      weeks[key][String(row.weekday)] = dayFromRow(row);
+    });
+    (payload.exceptions || []).forEach(function (row) {
+      exceptions[String(row.service_date).slice(0, 10)] = dayFromRow(row);
+    });
+    (busyRows || []).forEach(function (row) {
+      var key = String(row.appointment_date).slice(0, 10);
+      var start = Date.parse(row.starts_at);
+      var end = Date.parse(row.blocked_until);
+      if (!ranges[key]) {
+        ranges[key] = [];
+      }
+      if (!isNaN(start) && !isNaN(end)) {
+        ranges[key].push({ start: start, end: end });
+      }
+    });
+    schedule.remote = { standing: standing, weeks: weeks, exceptions: exceptions };
+    schedule.busyRanges = ranges;
+    schedule.travelMinutes = payload.travelMinutes;
+    schedule.unavailable = false;
+    schedule.loadError = "";
+    if (schedule.onChange) {
+      schedule.onChange();
+    }
+  };
   schedule.normalizeDay = normalizeDay;
   schedule.readStore = readStore;
   schedule.writeStore = writeStore;

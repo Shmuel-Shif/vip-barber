@@ -143,8 +143,17 @@
     if (text.indexOf("invalid appointment") !== -1) {
       return "פרטי ההזמנה לא תקינים.";
     }
-    if (text.indexOf("admin only") !== -1) {
+    if (text.indexOf("invalid hours") !== -1 || text.indexOf("invalid break") !== -1 || text.indexOf("invalid block") !== -1) {
+      return "השעות לא תקינות. צריך התחלה, סיום, והפסקות או חסימות בתוך הטווח.";
+    }
+    if (text.indexOf("invalid range") !== -1) {
+      return "טווח התאריכים לזמינות לא תקין.";
+    }
+    if (text.indexOf("admin only") !== -1 || text.indexOf("row-level security") !== -1 || text.indexOf("permission denied") !== -1) {
       return "הפעולה הזו שמורה לחשבון האדמין.";
+    }
+    if (text.indexOf("failed to fetch") !== -1 || text.indexOf("network") !== -1 || text.indexOf("load failed") !== -1) {
+      return "אין חיבור לשרת.";
     }
     if (text.indexOf("customer cannot change") !== -1) {
       return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
@@ -396,6 +405,114 @@
             return { error: messageFor(result.error) };
           }
           return { error: "" };
+        });
+      });
+    },
+    fetchCatalog: function () {
+      return withClient(function (ready) {
+        return ready.from("services").select("id, name, price_ils, minutes, addon, active").then(function (result) {
+          if (result.error) {
+            return { rows: [], error: messageFor(result.error) };
+          }
+          return { rows: result.data || [], error: "" };
+        });
+      });
+    },
+    fetchSchedule: function () {
+      return withClient(function (ready) {
+        return Promise.all([
+          ready.from("weekly_hours").select("weekday, status, start_time, end_time, breaks, blocked").order("weekday"),
+          ready.from("week_overrides").select("week_start, weekday, status, start_time, end_time, breaks, blocked"),
+          ready.from("date_exceptions").select("service_date, status, start_time, end_time, breaks, blocked"),
+          ready.from("business_settings").select("travel_minutes").eq("id", true).maybeSingle()
+        ]).then(function (results) {
+          var index;
+          for (index = 0; index < results.length; index += 1) {
+            if (results[index].error) {
+              return { schedule: null, error: messageFor(results[index].error) };
+            }
+          }
+          return {
+            schedule: {
+              weekly: results[0].data || [],
+              weeks: results[1].data || [],
+              exceptions: results[2].data || [],
+              travelMinutes: results[3].data ? results[3].data.travel_minutes : null
+            },
+            error: ""
+          };
+        });
+      });
+    },
+    saveService: function (id, price, minutes) {
+      return withClient(function (ready) {
+        return ready.from("services").update({
+          price_ils: price,
+          minutes: minutes
+        }).eq("id", id).select("id").then(function (result) {
+          if (result.error) {
+            return { error: messageFor(result.error) };
+          }
+          if (!result.data || !result.data.length) {
+            return { error: "הפעולה הזו שמורה לחשבון האדמין." };
+          }
+          return { error: "" };
+        });
+      });
+    },
+    saveWeeklyHours: function (rows) {
+      return withClient(function (ready) {
+        return ready.from("weekly_hours").upsert(rows, { onConflict: "weekday" }).select("weekday").then(function (result) {
+          if (result.error) {
+            return { error: messageFor(result.error) };
+          }
+          if (!result.data || result.data.length !== rows.length) {
+            return { error: "הפעולה הזו שמורה לחשבון האדמין." };
+          }
+          return { error: "" };
+        });
+      });
+    },
+    saveWeekOverride: function (weekStart, weekEnd, rows) {
+      return withClient(function (ready) {
+        return ready.from("week_overrides").upsert(rows, { onConflict: "week_start,weekday" }).select("weekday").then(function (result) {
+          if (result.error) {
+            return { error: messageFor(result.error) };
+          }
+          if (!result.data || result.data.length !== rows.length) {
+            return { error: "הפעולה הזו שמורה לחשבון האדמין." };
+          }
+          return ready.from("date_exceptions").delete().gte("service_date", weekStart).lte("service_date", weekEnd).then(function (cleared) {
+            if (cleared.error) {
+              return { error: messageFor(cleared.error) };
+            }
+            return { error: "" };
+          });
+        });
+      });
+    },
+    clearWeekOverride: function (weekStart, weekEnd) {
+      return withClient(function (ready) {
+        return ready.from("week_overrides").delete().eq("week_start", weekStart).then(function (result) {
+          if (result.error) {
+            return { error: messageFor(result.error) };
+          }
+          return ready.from("date_exceptions").delete().gte("service_date", weekStart).lte("service_date", weekEnd).then(function (cleared) {
+            if (cleared.error) {
+              return { error: messageFor(cleared.error) };
+            }
+            return { error: "" };
+          });
+        });
+      });
+    },
+    fetchBusy: function (from, to) {
+      return withClient(function (ready) {
+        return ready.rpc("list_busy_spans", { p_from: from, p_to: to }).then(function (result) {
+          if (result.error) {
+            return { rows: [], error: messageFor(result.error) };
+          }
+          return { rows: result.data || [], error: "" };
         });
       });
     }

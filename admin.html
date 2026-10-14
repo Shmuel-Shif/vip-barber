@@ -61,7 +61,7 @@
 
     <section class="admin-panel" data-admin-section="hours" hidden aria-labelledby="hours-title">
       <h1 id="hours-title">שעות פעילות</h1>
-      <p class="admin-note">השעות הקבועות חוזרות בכל שבוע. שבוע אחד אפשר לשנות בלי לשנות את השאר. השמירה נשארת במכשיר זה, בלי סנכרון בין מכשירים. לוח הלקוח במכשיר זה כן מתעדכן. תורים שכבר נקבעו לא מבוטלים.</p>
+      <p class="admin-note">השעות הקבועות חוזרות בכל שבוע. שבוע אחד אפשר לשנות בלי לשנות את השאר. חשבון אדמין שומר את השעות ואת חריגי התאריך בשרת. כניסה זמנית לפיתוח נשארת במכשיר הזה. תורים שכבר נקבעו לא מבוטלים.</p>
       <div class="admin-filters" id="hours-mode">
         <button type="button" id="hours-standing" aria-pressed="true">שעות קבועות</button>
         <button type="button" id="hours-week" aria-pressed="false">שבוע שנבחר</button>
@@ -124,7 +124,7 @@
 
     <section class="admin-panel" data-admin-section="settings" hidden aria-labelledby="settings-title">
       <h1 id="settings-title">הגדרות העסק</h1>
-      <p class="admin-note">ההגדרות נשמרות במכשיר הניהול בלבד. עמודי הלקוח ממשיכים להשתמש במחירי ההדגמה ובחלונות של חצי שעה.</p>
+      <p class="admin-note">מחיר ומשך של כל שירות נשמרים בשרת. שם התצוגה ומשך ברירת המחדל נשארים במכשיר הזה. זמן הנסיעה בין תורים נשאר בהגדרת השרת.</p>
       <form id="business-form">
         <label class="admin-field">שם לתצוגה בניהול
           <input id="biz-name" name="name" type="text" maxlength="80" autocomplete="organization" required>
@@ -138,7 +138,7 @@
             <input data-service="mens-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
           </label>
           <label class="admin-field">משך בדקות
-            <input data-service="mens-haircut" data-field="minutes" type="number" min="15" max="180" step="5" inputmode="numeric" required>
+            <input data-service="mens-haircut" data-field="minutes" type="number" min="10" max="180" step="5" inputmode="numeric" required>
           </label>
         </fieldset>
         <fieldset>
@@ -147,7 +147,7 @@
             <input data-service="kids-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
           </label>
           <label class="admin-field">משך בדקות
-            <input data-service="kids-haircut" data-field="minutes" type="number" min="15" max="180" step="5" inputmode="numeric" required>
+            <input data-service="kids-haircut" data-field="minutes" type="number" min="10" max="180" step="5" inputmode="numeric" required>
           </label>
         </fieldset>
         <fieldset>
@@ -156,7 +156,7 @@
             <input data-service="beard" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
           </label>
           <label class="admin-field">משך בדקות
-            <input data-service="beard" data-field="minutes" type="number" min="15" max="180" step="5" inputmode="numeric" required>
+            <input data-service="beard" data-field="minutes" type="number" min="10" max="180" step="5" inputmode="numeric" required>
           </label>
         </fieldset>
         <button type="submit" class="btn btn--gold admin-save">שמירת ההגדרות</button>

@@ -11,6 +11,7 @@
   var loginError = document.getElementById("admin-login-error");
   var usernameInput = document.getElementById("admin-username");
   var serverMode = false;
+  var serverCatalog = null;
 
   function showLoginError(message) {
     if (!loginError) {
@@ -117,6 +118,8 @@
       serverMode = true;
     }
     showAdmin();
+    loadServerSchedule();
+    loadServerPrices();
     if (!window.VIP_ORDERS || !window.VIP_ORDERS.reloadAccount) {
       return;
     }
@@ -239,6 +242,13 @@
   }
 
   function readAvailability() {
+    if (serverMode && schedule.remote) {
+      return {
+        standing: schedule.remote.standing || {},
+        weeks: schedule.remote.weeks || {},
+        exceptions: schedule.remote.exceptions || {}
+      };
+    }
     return schedule.readStore();
   }
 
@@ -607,6 +617,112 @@
     return days;
   }
 
+  function clock(value) {
+    var text = String(value || "");
+    return text.length >= 5 ? text.slice(0, 5) : "";
+  }
+
+  function shiftIso(value, days) {
+    var parts = String(value || "").split("-");
+    var date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) + days);
+    return iso(date);
+  }
+
+  function rowsFor(weekStart, days, keepBlocked) {
+    return schedule.weekdays.map(function (day) {
+      var item = days[day.id];
+      var open = item.status === "hours";
+      var row = {
+        weekday: Number(day.id),
+        status: open ? "hours" : "closed",
+        start_time: open ? clock(item.start) : null,
+        end_time: open ? clock(item.end) : null,
+        breaks: open ? item.breaks.filter(function (br) {
+          return br.start && br.end;
+        }).map(function (br) {
+          return { start: clock(br.start), end: clock(br.end) };
+        }) : [],
+        blocked: open && keepBlocked ? item.blocked.map(clock).filter(Boolean) : []
+      };
+      if (weekStart) {
+        row.week_start = weekStart;
+      }
+      return row;
+    });
+  }
+
+  function reloadServerSchedule(statusNode, successText) {
+    var auth = window.VIP_SUPABASE;
+    if (!auth || !auth.fetchSchedule) {
+      statusNode.textContent = "לא ניתן לטעון את השעות מהשרת.";
+      return Promise.resolve();
+    }
+    return auth.fetchSchedule().then(function (result) {
+      if (!serverMode) {
+        return false;
+      }
+      if (!result || result.error || !result.schedule || !result.schedule.weekly || !result.schedule.weekly.length || !schedule.applyRemote) {
+        statusNode.textContent = result && result.error ? result.error : "לא ניתן לטעון את השעות מהשרת.";
+        return false;
+      }
+      schedule.applyRemote(result.schedule, []);
+      loadWeek();
+      if (successText) {
+        statusNode.textContent = successText;
+      }
+      renderWeek();
+      paintConflicts();
+      return true;
+    }).catch(function () {
+      statusNode.textContent = "לא ניתן לטעון את השעות מהשרת.";
+      return false;
+    });
+  }
+
+  function loadServerSchedule() {
+    var statusNode = document.getElementById("week-status");
+    if (!statusNode) {
+      return;
+    }
+    statusNode.textContent = "טוענים את השעות מהשרת...";
+    reloadServerSchedule(statusNode, "");
+  }
+
+  function loadServerPrices() {
+    var auth = window.VIP_SUPABASE;
+    var message = document.getElementById("biz-status");
+    if (!auth || !auth.fetchCatalog) {
+      if (message) {
+        message.textContent = "לא ניתן לטעון את המחירים מהשרת.";
+      }
+      return;
+    }
+    auth.fetchCatalog().then(function (result) {
+      if (!serverMode) {
+        return;
+      }
+      if (!result || result.error || !result.rows || !result.rows.length) {
+        if (message) {
+          message.textContent = result && result.error ? result.error : "לא ניתן לטעון את המחירים מהשרת.";
+        }
+        return;
+      }
+      serverCatalog = result.rows || [];
+      if (window.VIP_DEMO && window.VIP_DEMO.applyServer) {
+        window.VIP_DEMO.applyServer(serverCatalog);
+      }
+      fillSettings();
+      refreshLists();
+      if (message) {
+        message.textContent = "";
+      }
+    }).catch(function () {
+      if (message) {
+        message.textContent = "לא ניתן לטעון את המחירים מהשרת.";
+      }
+    });
+  }
+
   function paintConflicts() {
     var box = document.getElementById("week-conflicts");
     var ordersApi = window.VIP_ORDERS;
@@ -638,7 +754,9 @@
         return;
       }
       if (!box.childNodes.length) {
-        paragraph(box, "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות במכשיר זה:");
+        paragraph(box, serverMode
+          ? "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות:"
+          : "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות במכשיר זה:");
       }
       paragraph(box, whenText(order) + " — " + ((order.customer && order.customer.fullName) || "בלי שם"));
     });
@@ -655,6 +773,46 @@
     });
     if (invalid) {
       statusNode.textContent = "ביום פתוח צריך שעת התחלה, שעת סיום מאוחרת ממנה, והפסקות בתוך הטווח.";
+      return;
+    }
+    if (serverMode && !schedule.remote) {
+      statusNode.textContent = "לא ניתן לשמור לפני שהשעות נטענו מהשרת.";
+      return;
+    }
+    if (serverMode) {
+      var auth = window.VIP_SUPABASE;
+      var days = cleanWeek();
+      var weekStart = iso(cursor);
+      if (hoursMode === "standing") {
+        schedule.weekdays.forEach(function (day) {
+          days[day.id].blocked = [];
+        });
+      }
+      if (!auth || !auth.saveWeeklyHours || !auth.saveWeekOverride) {
+        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+        return;
+      }
+      var request = hoursMode === "standing"
+        ? auth.saveWeeklyHours(rowsFor("", days, false))
+        : auth.saveWeekOverride(weekStart, shiftIso(weekStart, 6), rowsFor(weekStart, days, true));
+      request.then(function (result) {
+        if (!result || result.error) {
+          statusNode.textContent = result && result.error ? result.error : "לא ניתן לשמור את השעות בשרת.";
+          return null;
+        }
+        if (hoursMode === "week") {
+          weekIsOverride = true;
+        }
+        return reloadServerSchedule(statusNode, hoursMode === "standing"
+          ? "השעות הקבועות נשמרו בשרת. תורים שכבר נקבעו לא בוטלו."
+          : "השבוע שנבחר נשמר בשרת. השעות הקבועות לא השתנו, וחריגי התאריך של השבוע הוסרו. תורים שכבר נקבעו לא בוטלו.").then(function (ok) {
+          if (!ok) {
+            statusNode.textContent = "השמירה נשלחה לשרת, אבל לא ניתן לטעון מחדש את השעות.";
+          }
+        });
+      }).catch(function () {
+        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+      });
       return;
     }
     stored = readAvailability();
@@ -689,7 +847,35 @@
 
   function clearWeekOverride() {
     var statusNode = document.getElementById("week-status");
-    var stored = readAvailability();
+    var stored;
+    if (serverMode && !schedule.remote) {
+      statusNode.textContent = "לא ניתן לשמור לפני שהשעות נטענו מהשרת.";
+      return;
+    }
+    if (serverMode) {
+      var auth = window.VIP_SUPABASE;
+      var weekStart = iso(cursor);
+      if (!auth || !auth.clearWeekOverride) {
+        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+        return;
+      }
+      auth.clearWeekOverride(weekStart, shiftIso(weekStart, 6)).then(function (result) {
+        if (!result || result.error) {
+          statusNode.textContent = result && result.error ? result.error : "לא ניתן לשמור את השעות בשרת.";
+          return;
+        }
+        weekIsOverride = false;
+        reloadServerSchedule(statusNode, "השבוע חזר לשעות הקבועות בשרת. התורים הקיימים לא בוטלו.").then(function (ok) {
+          if (!ok) {
+            statusNode.textContent = "השמירה נשלחה לשרת, אבל לא ניתן לטעון מחדש את השעות.";
+          }
+        });
+      }).catch(function () {
+        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+      });
+      return;
+    }
+    stored = readAvailability();
     delete stored.weeks[iso(cursor)];
     schedule.weekdays.forEach(function (day) {
       delete stored.exceptions[iso(weekDate(day.id))];
@@ -1042,7 +1228,7 @@
         if (base.services[id].priceIls !== null && item.priceIls !== null && item.priceIls !== "" && !isNaN(Number(item.priceIls))) {
           base.services[id].priceIls = Number(item.priceIls);
         }
-        if (item.minutes >= 15 && item.minutes <= 180) {
+        if (item.minutes >= 10 && item.minutes <= 180) {
           base.services[id].minutes = Number(item.minutes);
         }
       });
@@ -1060,6 +1246,19 @@
     }
     document.getElementById("biz-name").value = data.name;
     document.getElementById("biz-slot").value = String(data.slotMinutes);
+    if (serverCatalog) {
+      serverCatalog.forEach(function (row) {
+        if (!data.services[row.id]) {
+          data.services[row.id] = { priceIls: null, minutes: 30 };
+        }
+        if (row.price_ils !== null && row.price_ils !== undefined) {
+          data.services[row.id].priceIls = Number(row.price_ils);
+        }
+        if (row.minutes !== null && row.minutes !== undefined) {
+          data.services[row.id].minutes = Number(row.minutes);
+        }
+      });
+    }
     each(form.querySelectorAll("[data-service]"), function (input) {
       var service = data.services[input.getAttribute("data-service")];
       if (!service) {
@@ -1158,10 +1357,13 @@
       if (!current.services[id]) {
         return;
       }
-      if (field === "minutes" && !(value >= 15 && value <= 180)) {
+      if (field === "minutes" && !(value >= 10 && value <= 180)) {
         invalid = true;
       }
-      if (field === "price" && (input.value === "" || value < 0 || value > 9999)) {
+      if (field === "price" && (input.value === "" || value < 0 || value > 9999 || value !== Math.round(value))) {
+        invalid = true;
+      }
+      if (field === "minutes" && value !== Math.round(value)) {
         invalid = true;
       }
       if (!invalid && field === "minutes") {
@@ -1172,7 +1374,65 @@
       }
     });
     if (invalid) {
-      message.textContent = "בדקו מחיר ומספר דקות. מחיר הוא מספר בין 0 ל־9999, ומשך הוא בין 15 ל־180.";
+      message.textContent = "בדקו מחיר ומספר דקות. מחיר הוא מספר בין 0 ל־9999, ומשך הוא בין 10 ל־180.";
+      return;
+    }
+    if (serverMode && !serverCatalog) {
+      message.textContent = "לא ניתן לשמור לפני שהמחירים נטענו מהשרת.";
+      return;
+    }
+    if (serverMode) {
+      var auth = window.VIP_SUPABASE;
+      var jobs = [];
+      if (!auth || !auth.saveService) {
+        message.textContent = "לא ניתן לשמור את המחירים בשרת.";
+        return;
+      }
+      Object.keys(current.services).forEach(function (id) {
+        var item = current.services[id];
+        if (item.priceIls === null || item.priceIls === undefined) {
+          return;
+        }
+        jobs.push(auth.saveService(id, item.priceIls, item.minutes));
+      });
+      Promise.all(jobs).then(function (results) {
+        var failed = null;
+        (results || []).forEach(function (result) {
+          if (!failed && (!result || result.error)) {
+            failed = result && result.error ? result.error : "לא ניתן לשמור את המחירים בשרת.";
+          }
+        });
+        if (failed) {
+          message.textContent = failed;
+          return;
+        }
+        serverCatalog = Object.keys(current.services).map(function (id) {
+          return {
+            id: id,
+            price_ils: current.services[id].priceIls,
+            minutes: current.services[id].minutes,
+            active: true
+          };
+        });
+        if (window.VIP_DEMO && window.VIP_DEMO.applyServer) {
+          window.VIP_DEMO.applyServer(serverCatalog);
+        }
+        try {
+          localStorage.setItem(settingsKey, JSON.stringify({
+            temporary: true,
+            syncedWithCustomers: false,
+            name: name,
+            slotMinutes: slotMinutes,
+            services: current.services
+          }));
+        } catch (error) {
+          message.textContent = "המחירים נשמרו בשרת. השם ומשך ברירת המחדל לא נשמרו במכשיר.";
+          return;
+        }
+        message.textContent = "המחירים ומשך השירותים נשמרו בשרת. הלקוחות יראו אותם אחרי טעינה מחדש. השם ומשך ברירת המחדל נשארים במכשיר הזה.";
+      }).catch(function () {
+        message.textContent = "לא ניתן לשמור את המחירים בשרת.";
+      });
       return;
     }
     try {
@@ -1187,7 +1447,7 @@
       message.textContent = "לא ניתן לשמור במכשיר זה.";
       return;
     }
-    message.textContent = "ההגדרות נשמרו במכשיר זה בלבד. מחירי עמודי הלקוח ומשך התורים שם לא השתנו.";
+    message.textContent = "נשמר במכשיר זה בלבד. מחירי הלקוחות מגיעים מהשרת, ורק חשבון אדמין יכול לעדכן אותם.";
   });
   each(document.querySelectorAll("[data-admin-panel]"), function (button) {
     button.addEventListener("click", function () {

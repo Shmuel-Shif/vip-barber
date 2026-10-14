@@ -445,7 +445,8 @@
     },
     usesServer: function () {
       return viewingServer;
-    }
+    },
+    isServerId: isServerId
   };
 })();
 
@@ -538,6 +539,8 @@
     return amount + " ₪";
   }
 
+  var pricesReady = false;
+
   function fillSummary(root, draft) {
     var adultPrice = numericPrice("mens-haircut");
     var childPrice = numericPrice("kids-haircut");
@@ -550,6 +553,11 @@
       var paragraph = document.createElement("p");
       paragraph.textContent = text;
       root.appendChild(paragraph);
+    }
+
+    if (!pricesReady) {
+      line(data.priceError || "טוענים את המחירים מהשרת.");
+      return;
     }
 
     if (draft.adults + draft.children + draft.vip < 1) {
@@ -592,7 +600,42 @@
     fillSummary(savedView, booking.read());
   }
 
+  function loadCatalog() {
+    if (!data) {
+      return;
+    }
+    if (!window.VIP_SUPABASE || !window.VIP_SUPABASE.fetchCatalog) {
+      data.priceError = "לא ניתן לטעון את המחירים מהשרת.";
+      if (data.onUpdate) {
+        data.onUpdate();
+      }
+      return;
+    }
+    window.VIP_SUPABASE.fetchCatalog().then(function (result) {
+      if (!result || result.error || !data.applyServer || !result.rows || !result.rows.length) {
+        data.priceError = result && result.error ? result.error : "לא ניתן לטעון את המחירים מהשרת.";
+        if (data.onUpdate) {
+          data.onUpdate();
+        }
+        return;
+      }
+      data.applyServer(result.rows);
+    }).catch(function () {
+      data.priceError = "לא ניתן לטעון את המחירים מהשרת.";
+      if (data.onUpdate) {
+        data.onUpdate();
+      }
+    });
+  }
+
   if (!party || !booking) {
+    if (savedView && data) {
+      data.onUpdate = function () {
+        pricesReady = !data.priceError;
+        fillSummary(savedView, booking.read());
+      };
+      loadCatalog();
+    }
     return;
   }
 
@@ -613,18 +656,47 @@
   var childRate = document.getElementById("child-rate");
   var beardNote = document.getElementById("beard-note");
 
-  var adultPrice = numericPrice("mens-haircut");
-  var childPrice = numericPrice("kids-haircut");
-  var beardPrice = numericPrice("beard");
+  var adultPrice = null;
+  var childPrice = null;
+  var beardPrice = null;
 
-  if (adultRate) {
-    adultRate.textContent = adultPrice === null ? "תספורת מבוגר" : "תספורת מבוגר, " + adultPrice + " ₪ לאדם";
-  }
-  if (childRate) {
-    childRate.textContent = childPrice === null ? "תספורת ילד" : "תספורת ילד, " + childPrice + " ₪ לילד";
-  }
-  if (beardNote) {
-    beardNote.textContent = beardPrice === null ? "וסידור זקן תוספת" : "וסידור זקן תוספת " + beardPrice + " ₪";
+  function showRates() {
+    adultPrice = numericPrice("mens-haircut");
+    childPrice = numericPrice("kids-haircut");
+    beardPrice = numericPrice("beard");
+    if (data.priceError) {
+      if (adultRate) {
+        adultRate.textContent = data.priceError;
+      }
+      if (childRate) {
+        childRate.textContent = "";
+      }
+      if (beardNote) {
+        beardNote.textContent = "";
+      }
+      return;
+    }
+    if (!pricesReady) {
+      if (adultRate) {
+        adultRate.textContent = "טוענים את המחירים מהשרת.";
+      }
+      if (childRate) {
+        childRate.textContent = "";
+      }
+      if (beardNote) {
+        beardNote.textContent = "";
+      }
+      return;
+    }
+    if (adultRate) {
+      adultRate.textContent = adultPrice === null ? "תספורת מבוגר" : "תספורת מבוגר, " + adultPrice + " ₪ לאדם";
+    }
+    if (childRate) {
+      childRate.textContent = childPrice === null ? "תספורת ילד" : "תספורת ילד, " + childPrice + " ₪ לילד";
+    }
+    if (beardNote) {
+      beardNote.textContent = beardPrice === null ? "וסידור זקן תוספת" : "וסידור זקן תוספת " + beardPrice + " ₪";
+    }
   }
 
   function paint() {
@@ -674,7 +746,17 @@
     }
   });
 
+  showRates();
+  data.onUpdate = function () {
+    pricesReady = !data.priceError;
+    showRates();
+    paint();
+    if (savedView) {
+      fillSummary(savedView, booking.read());
+    }
+  };
   paint();
+  loadCatalog();
 })();
 
 (function () {
@@ -768,6 +850,12 @@
       return;
     }
     var slots = slotsFor(date);
+    if (schedule.loadError) {
+      var waiting = document.createElement("p");
+      waiting.textContent = schedule.loadError;
+      times.appendChild(waiting);
+      return;
+    }
     if (!slots.length) {
       var note = document.createElement("p");
       var hadHours = schedule.openSlots(date, { ignoreTaken: true, ignorePast: true }).length > 0;
@@ -807,9 +895,13 @@
     next.disabled = new Date(year, month + 1, 1) > bookUntil;
     if (hint) {
       var untilText = bookUntil.getDate() + " ב" + months[bookUntil.getMonth()];
-      hint.textContent = todayStart.getDay() === 6
-        ? "היום שבת, ואפשר להזמין לשבוע הבא עד " + untilText + ". אין סנכרון בין מכשירים."
-        : "אפשר להזמין רק עד " + untilText + ". בשבת ייפתח השבוע הבא, מיום ראשון והלאה. אין סנכרון בין מכשירים.";
+      if (schedule.loadError) {
+        hint.textContent = schedule.loadError;
+      } else {
+        hint.textContent = todayStart.getDay() === 6
+          ? "היום שבת, ואפשר להזמין לשבוע הבא עד " + untilText + "."
+          : "אפשר להזמין רק עד " + untilText + ". בשבת ייפתח השבוע הבא, מיום ראשון והלאה.";
+      }
     }
     grid.textContent = "";
 
@@ -862,10 +954,14 @@
       grid.appendChild(button);
     }
 
+    if (!schedule.unavailable && !schedule.loadError && draft.date && slotsFor(parse(draft.date)).indexOf(draft.time) === -1) {
+      draft.time = "";
+      save();
+    }
     renderTimes(parse(draft.date));
     if (continueButton) {
       var enough = booking.enoughPeople(draft);
-      var ready = !!(draft.date && draft.time && enough);
+      var ready = !!(draft.date && draft.time && enough && !schedule.unavailable && !schedule.loadError);
       continueButton.disabled = !ready;
       continueButton.setAttribute("aria-disabled", ready ? "false" : "true");
     }
@@ -891,7 +987,36 @@
       window.location.href = "booking-details.html";
     });
   }
+  if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && schedule.applyRemote) {
+    schedule.unavailable = true;
+    schedule.loadError = "טוענים את השעות מהשרת.";
+  }
   render();
+  if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && schedule.applyRemote) {
+    window.VIP_SUPABASE.fetchSchedule().then(function (result) {
+      if (!result || result.error || !result.schedule || !result.schedule.weekly || !result.schedule.weekly.length) {
+        schedule.unavailable = true;
+        schedule.loadError = result && result.error ? result.error : "לא ניתן לטעון את השעות מהשרת.";
+        render();
+        return null;
+      }
+      return window.VIP_SUPABASE.fetchBusy(iso(todayStart), iso(bookUntil)).then(function (busy) {
+        if (!busy || busy.error) {
+          schedule.unavailable = true;
+          schedule.loadError = busy && busy.error ? busy.error : "לא ניתן לטעון את התורים התפוסים.";
+          render();
+          return null;
+        }
+        schedule.applyRemote(result.schedule, busy.rows);
+        render();
+        return busy;
+      });
+    }).catch(function () {
+      schedule.unavailable = true;
+      schedule.loadError = "לא ניתן לטעון את השעות מהשרת.";
+      render();
+    });
+  }
 })();
 
 (function () {
@@ -1514,21 +1639,39 @@
     return parts.join(" · ") || "לא נבחרה כמות";
   }
 
+  var accountFailed = false;
+  var ordersFeedback = document.getElementById("orders-feedback");
+
+  function sayOrders(text) {
+    if (ordersFeedback && document.getElementById("orders-list")) {
+      ordersFeedback.textContent = text;
+    }
+  }
+
   function shownOrders() {
-    var remote = orders.accountOrders ? orders.accountOrders() : [];
-    var remoteIds = {};
+    var remote = accountFailed || !orders.accountOrders ? [] : orders.accountOrders();
+    var seen = {};
     remote.forEach(function (order) {
-      remoteIds[order.id] = true;
+      if (order && order.id) {
+        seen[order.id] = true;
+      }
     });
-    return remote.concat(orders.read().filter(function (order) {
-      return !order.serverId || !remoteIds[order.serverId];
-    }));
+    var onDevice = orders.read().filter(function (order) {
+      if (!order || order.server || order.serverId || seen[order.id] || seen[order.serverId]) {
+        return false;
+      }
+      return true;
+    });
+    return remote.concat(onDevice);
   }
 
   function paint(target, canApprove) {
     var items = shownOrders();
     target.textContent = "";
     if (!items.length) {
+      if (accountFailed) {
+        return;
+      }
       var empty = document.createElement("p");
       empty.className = "orders-empty";
       empty.textContent = "אין עדיין הזמנות.";
@@ -1587,8 +1730,9 @@
         approve.className = "btn btn--gold order-card__approve";
         approve.textContent = "אישור התור";
         approve.addEventListener("click", function () {
-          orders.approve(order.id);
-          paint(target, true);
+          approve.textContent = "אישור התור";
+          approve.addEventListener("click", function () {
+          });
         });
         card.appendChild(approve);
       }
@@ -1600,23 +1744,57 @@
     paint(list, false);
     function loadOwnOrders() {
       var auth = window.VIP_SUPABASE;
-      if (!auth || !auth.profile) {
+      if (!auth || !auth.profile || !orders.reloadAccount) {
+        accountFailed = true;
+        if (orders.forgetAccount) {
+          orders.forgetAccount();
+        }
+        sayOrders("לא ניתן לטעון את ההזמנות מהשרת.");
+        paint(list, false);
         return Promise.resolve();
       }
+      sayOrders("טוענים את ההזמנות מהחשבון...");
       return auth.profile().then(function (result) {
         if (!result || !result.session || !result.session.user) {
-          orders.forgetAccount();
+          accountFailed = !!(result && result.error);
+          if (orders.forgetAccount) {
+            orders.forgetAccount();
+          }
+          sayOrders(accountFailed ? result.error : "");
           paint(list, false);
           return null;
         }
-        return orders.reloadAccount().then(function () {
-          orders.keepOwn(result.session.user.id);
+        return orders.reloadAccount().then(function (loaded) {
+          if (!loaded || loaded.error) {
+            accountFailed = true;
+            if (orders.forgetAccount) {
+              orders.forgetAccount();
+            }
+            sayOrders(loaded && loaded.error ? loaded.error : "לא ניתן לטעון את ההזמנות מהשרת.");
+            paint(list, false);
+            return null;
+          }
+          accountFailed = false;
+          if (orders.keepOwn) {
+            orders.keepOwn(result.session.user.id);
+          }
+          sayOrders("");
           paint(list, false);
+          return loaded;
         });
+      }).catch(function () {
+        accountFailed = true;
+        if (orders.forgetAccount) {
+          orders.forgetAccount();
+        }
+        sayOrders("לא ניתן לטעון את ההזמנות מהשרת.");
+        paint(list, false);
       });
     }
     loadOwnOrders();
     orders.paintCustomerList = function () {
+      accountFailed = false;
+      sayOrders("");
       paint(list, false);
     };
     orders.refreshCustomerList = loadOwnOrders;
@@ -1676,7 +1854,7 @@
     confirmYes.addEventListener("click", function () {
       var saved = orders.cancel(cancelId, { by: "customer" });
       if (saved && typeof saved.then === "function") {
-        saved.then(finishCancel);
+      var saved = orders.cancel(cancelId, { by: "customer" });
         return;
       }
       finishCancel(saved);
