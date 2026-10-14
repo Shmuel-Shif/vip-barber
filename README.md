@@ -1,2 +1,2 @@
-# vip-barber
-VIP At-Home Barber Booking App
+# VIP
+VIP At-Home Booking App
