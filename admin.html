@@ -23,6 +23,7 @@
       <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
     </a>
     <p class="admin-mark">ניהול</p>
+    <button type="button" class="admin-dev-exit" id="admin-dev-exit" hidden>מסך ההתחברות</button>
   </header>
   <main id="content">
     <section class="admin-login" id="admin-login" aria-labelledby="admin-login-title">
@@ -43,6 +44,8 @@
         <p id="admin-login-error" class="admin-login__error" role="alert" hidden></p>
         <button type="submit" class="btn btn--gold" id="admin-login-submit">התחברות</button>
       </form>
+      <button type="button" class="btn btn--ghost" id="admin-dev-open">כניסה זמנית לפיתוח</button>
+      <p class="admin-login__note">בלי שם משתמש ובלי סיסמה. זה לא אימות ולא אבטחה, רק כדי להמשיך לפתח עד חיבור Supabase.</p>
       <noscript>
         <p class="admin-login__note">כדי להציג את המסך צריך לאפשר JavaScript. אין כאן התחברות לשרת.</p>
       </noscript>
@@ -58,15 +61,22 @@
 
     <section class="admin-panel" data-admin-section="hours" hidden aria-labelledby="hours-title">
       <h1 id="hours-title">שעות פעילות</h1>
-      <p class="admin-note">רשימת ימי השבוע בלבד. השמירה נשארת במכשיר זה, ויומן הלקוחות לא מתעדכן.</p>
-      <div class="cal__nav admin-day-nav">
+      <p class="admin-note">השעות הקבועות חוזרות בכל שבוע. שבוע אחד אפשר לשנות בלי לשנות את השאר. השמירה נשארת במכשיר זה, בלי סנכרון בין מכשירים. לוח הלקוח במכשיר זה כן מתעדכן. תורים שכבר נקבעו לא מבוטלים.</p>
+      <div class="admin-filters" id="hours-mode">
+        <button type="button" id="hours-standing" aria-pressed="true">שעות קבועות</button>
+        <button type="button" id="hours-week" aria-pressed="false">שבוע שנבחר</button>
+      </div>
+      <p id="hours-scope" class="admin-note"></p>
+      <div class="cal__nav admin-day-nav" id="week-nav" hidden>
         <button type="button" id="week-prev">שבוע קודם</button>
         <h2 id="week-label"></h2>
         <button type="button" id="week-next">שבוע הבא</button>
       </div>
       <div id="week-days" class="admin-hours"></div>
-      <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השעות</button>
+      <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השעות הקבועות</button>
+      <button type="button" class="btn btn--ghost" id="week-clear" hidden>ביטול השינוי החריג</button>
       <p id="week-status" class="admin-feedback" role="status"></p>
+      <div id="week-conflicts" class="admin-conflicts"></div>
     </section>
 
     <section class="admin-panel" data-admin-section="day" hidden aria-labelledby="day-title">

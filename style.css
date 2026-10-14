@@ -2644,6 +2644,21 @@ body.admin #admin-app[hidden] {
   display: none !important;
 }
 
+body.admin #week-clear {
+  width: 100%;
+  margin-top: 0.7rem;
+}
+
+body.admin .admin-conflicts {
+  margin-top: 0.8rem;
+}
+
+body.admin .admin-conflicts p {
+  margin: 0.35rem 0 0;
+  color: #f3d2cb;
+  line-height: 1.45;
+}
+
 body.admin-locked .site-header {
   display: none;
 }
@@ -2734,6 +2749,18 @@ body.admin .admin-login__secret input {
 
 .admin-login .btn {
   margin-top: 1rem;
+}
+
+.admin-dev-exit {
+  min-height: 2.4rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gold-light);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 @media (min-width: 720px) {

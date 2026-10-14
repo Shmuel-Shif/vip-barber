@@ -36,6 +36,64 @@
     });
   }
 
+  var devOpen = document.getElementById("admin-dev-open");
+  var devExit = document.getElementById("admin-dev-exit");
+  var devKey = "vip-admin-dev-open";
+
+  function openAdminForDevelopment() {
+    var app = document.getElementById("admin-app");
+    var login = document.getElementById("admin-login");
+    document.body.classList.remove("admin-locked");
+    if (login) {
+      login.hidden = true;
+    }
+    if (app) {
+      app.hidden = false;
+    }
+    if (devExit) {
+      devExit.hidden = false;
+    }
+    try {
+      sessionStorage.setItem(devKey, "1");
+    } catch (error) {
+      return;
+    }
+  }
+
+  function closeAdminDevelopment() {
+    var app = document.getElementById("admin-app");
+    var login = document.getElementById("admin-login");
+    document.body.classList.add("admin-locked");
+    if (login) {
+      login.hidden = false;
+    }
+    if (app) {
+      app.hidden = true;
+    }
+    if (devExit) {
+      devExit.hidden = true;
+    }
+    try {
+      sessionStorage.removeItem(devKey);
+    } catch (error) {
+      return;
+    }
+  }
+
+  if (devOpen) {
+    devOpen.addEventListener("click", openAdminForDevelopment);
+  }
+  if (devExit) {
+    devExit.addEventListener("click", closeAdminDevelopment);
+  }
+  try {
+    if (sessionStorage.getItem(devKey) === "1") {
+      openAdminForDevelopment();
+    }
+  } catch (error) {
+    /* This browser blocked sessionStorage. The dev button still opens the admin. */
+  }
+
   if (loginForm) {
     loginForm.addEventListener("submit", function (event) {
       var username = usernameInput ? usernameInput.value.trim() : "";
@@ -84,6 +142,8 @@
   var dayCursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   var week = {};
   var exceptions = {};
+  var hoursMode = "standing";
+  var weekIsOverride = false;
   var openDay = "";
   var openOrder = "";
   var cancelId = "";
@@ -119,25 +179,12 @@
   }
 
   function readAvailability() {
-    try {
-      var raw = localStorage.getItem(schedule.storageKey);
-      var data = raw ? JSON.parse(raw) : {};
-      return {
-        weeks: data && data.weeks ? data.weeks : {},
-        exceptions: data && data.exceptions ? data.exceptions : {}
-      };
-    } catch (error) {
-      return { weeks: {}, exceptions: {} };
-    }
+    return schedule.readStore();
   }
 
-  function writeAvailability(weeks) {
-    localStorage.setItem(schedule.storageKey, JSON.stringify({
-      temporary: true,
-      syncedWithBookings: false,
-      weeks: weeks,
-      exceptions: exceptions
-    }));
+  function writeAvailability(stored) {
+    exceptions = stored.exceptions || {};
+    schedule.writeStore(stored);
   }
 
   function copyBreaks(list) {
@@ -187,16 +234,32 @@
     return days;
   }
 
+  function weekDate(dayId) {
+    return new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + Number(dayId));
+  }
+
   function loadWeek() {
     var stored = readAvailability();
     exceptions = stored.exceptions;
-    week = blankWeek();
     var saved = stored.weeks[iso(cursor)] || null;
-    if (!saved) {
-      return;
-    }
+    weekIsOverride = !!saved;
+    week = blankWeek();
     schedule.weekdays.forEach(function (day) {
-      week[day.id] = normalizeDay(saved[day.id]);
+      var dateValue = iso(weekDate(day.id));
+      if (hoursMode === "standing") {
+        week[day.id] = schedule.standingDay(day.id, stored);
+        week[day.id].blocked = [];
+        return;
+      }
+      if (stored.exceptions[dateValue]) {
+        weekIsOverride = true;
+        week[day.id] = normalizeDay(stored.exceptions[dateValue]);
+      } else if (saved && saved[day.id]) {
+        week[day.id] = normalizeDay(saved[day.id]);
+      } else {
+        week[day.id] = schedule.standingDay(day.id, stored);
+        week[day.id].blocked = [];
+      }
     });
   }
 
@@ -369,14 +432,43 @@
 
   function renderWeek() {
     var label = document.getElementById("week-label");
+    var scope = document.getElementById("hours-scope");
+    var nav = document.getElementById("week-nav");
+    var saveButton = document.getElementById("week-save");
+    var clearButton = document.getElementById("week-clear");
+    var standingButton = document.getElementById("hours-standing");
+    var weekButton = document.getElementById("hours-week");
     var end = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6);
     if (label) {
       label.textContent = cursor.getDate() + " ב" + months[cursor.getMonth()] + " – " + end.getDate() + " ב" + months[end.getMonth()];
     }
+    if (nav) {
+      nav.hidden = hoursMode !== "week";
+    }
+    if (standingButton) {
+      standingButton.setAttribute("aria-pressed", hoursMode === "standing" ? "true" : "false");
+    }
+    if (weekButton) {
+      weekButton.setAttribute("aria-pressed", hoursMode === "week" ? "true" : "false");
+    }
+    if (saveButton) {
+      saveButton.textContent = hoursMode === "standing" ? "שמירת השעות הקבועות" : "שמירת השינוי לשבוע הזה";
+    }
+    if (clearButton) {
+      clearButton.hidden = hoursMode !== "week" || !weekIsOverride;
+    }
+    if (scope) {
+      if (hoursMode === "standing") {
+        scope.textContent = "אלה שעות קבועות. הן חוזרות בכל שבוע שאין לו שינוי חריג.";
+      } else if (weekIsOverride) {
+        scope.textContent = "שינוי חריג לשבוע שנבחר. שאר השבועות נשארים לפי השעות הקבועות.";
+      } else {
+        scope.textContent = "השבוע הזה עדיין לפי השעות הקבועות. שמירה כאן תחול רק על השבוע שנבחר.";
+      }
+    }
     root.textContent = "";
     schedule.weekdays.forEach(function (day) {
-      var date = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + Number(day.id));
-      var dateValue = iso(date);
+      var date = weekDate(day.id);
       var item = week[day.id];
       var open = item.status === "hours";
       var card = document.createElement("article");
@@ -387,7 +479,9 @@
       var name = document.createElement("button");
       name.type = "button";
       name.className = "admin-hour__name";
-      name.textContent = "יום " + day.label;
+      name.textContent = hoursMode === "week"
+        ? "יום " + day.label + ", " + date.getDate() + " ב" + months[date.getMonth()]
+        : "יום " + day.label;
       name.setAttribute("aria-expanded", openDay === day.id ? "true" : "false");
       name.addEventListener("click", function () {
         openDay = openDay === day.id ? "" : day.id;
@@ -425,66 +519,8 @@
         var more = document.createElement("div");
         more.className = "admin-hour__more";
         more.appendChild(breakEditor(item.breaks, !open, markDirty));
-        more.appendChild(blockEditor(item, markDirty));
-        var exception = exceptions[dateValue] ? normalizeDay(exceptions[dateValue]) : null;
-        paragraph(more, "שעות חריגות ל־" + date.getDate() + " ב" + months[date.getMonth()], "admin-kicker");
-        if (!exception) {
-          var addException = document.createElement("button");
-          addException.type = "button";
-          addException.className = "btn btn--ghost";
-          addException.textContent = "הוספת שעות חריגות ליום הזה";
-          addException.addEventListener("click", function () {
-            exceptions[dateValue] = blankDay();
-            exceptions[dateValue].status = "closed";
-            markDirty();
-            renderWeek();
-          });
-          more.appendChild(addException);
-        } else {
-          var modeRow = document.createElement("div");
-          modeRow.className = "admin-inline";
-          [["closed", "סגור ביום הזה"], ["hours", "שעות אחרות"]].forEach(function (mode) {
-            var button = document.createElement("button");
-            button.type = "button";
-            button.className = "admin-switch";
-            button.textContent = mode[1];
-            button.setAttribute("aria-pressed", exception.status === mode[0] ? "true" : "false");
-            button.addEventListener("click", function () {
-              exception.status = mode[0];
-              exceptions[dateValue] = exception;
-              markDirty();
-              renderWeek();
-            });
-            modeRow.appendChild(button);
-          });
-          more.appendChild(modeRow);
-          var exceptionTimes = document.createElement("div");
-          exceptionTimes.className = "admin-hour__times";
-          [["start", "התחלה"], ["end", "סיום"]].forEach(function (field) {
-            var wrap = document.createElement("label");
-            wrap.textContent = field[1];
-            wrap.appendChild(timeInput(exception[field[0]], exception.status !== "hours", function (value) {
-              exception[field[0]] = value;
-              exceptions[dateValue] = exception;
-              markDirty();
-            }));
-            exceptionTimes.appendChild(wrap);
-          });
-          more.appendChild(exceptionTimes);
-          more.appendChild(breakEditor(exception.breaks, exception.status !== "hours", function () {
-            exceptions[dateValue] = exception;
-            markDirty();
-          }));
-          var clearException = document.createElement("button");
-          clearException.type = "button";
-          clearException.className = "btn btn--ghost";
-          clearException.textContent = "מחיקת השעות החריגות";
-          clearException.addEventListener("click", function () {
-            delete exceptions[dateValue];
-            markDirty();
-            renderWeek();
-          });
-          more.appendChild(clearException);
+        if (hoursMode === "week") {
+          more.appendChild(blockEditor(item, markDirty));
         }
         card.appendChild(more);
       }
@@ -511,15 +547,49 @@
     return days;
   }
 
+  function paintConflicts() {
+    var box = document.getElementById("week-conflicts");
+    var ordersApi = window.VIP_ORDERS;
+    var dates = {};
+    if (!box) {
+      return;
+    }
+    box.textContent = "";
+    if (hoursMode === "week") {
+      schedule.weekdays.forEach(function (day) {
+        dates[iso(weekDate(day.id))] = true;
+      });
+    }
+    if (!ordersApi) {
+      return;
+    }
+    ordersApi.read().forEach(function (order) {
+      var date;
+      var slots;
+      if (!order || (order.status !== "pending" && order.status !== "approved") || !order.date || !order.time) {
+        return;
+      }
+      if (hoursMode === "week" && !dates[order.date]) {
+        return;
+      }
+      date = new Date(Number(order.date.slice(0, 4)), Number(order.date.slice(5, 7)) - 1, Number(order.date.slice(8, 10)));
+      slots = schedule.openSlots(date, { ignoreTaken: true, ignorePast: true });
+      if (slots.indexOf(order.time) !== -1) {
+        return;
+      }
+      if (!box.childNodes.length) {
+        paragraph(box, "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות במכשיר זה:");
+      }
+      paragraph(box, whenText(order) + " — " + ((order.customer && order.customer.fullName) || "בלי שם"));
+    });
+  }
+
   function saveWeek() {
     var statusNode = document.getElementById("week-status");
     var invalid = false;
+    var stored;
     schedule.weekdays.forEach(function (day) {
       if (!dayHoursValid(week[day.id])) {
-        invalid = true;
-      }
-      var dateValue = iso(new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + Number(day.id)));
-      if (exceptions[dateValue] && !dayHoursValid(normalizeDay(exceptions[dateValue]))) {
         invalid = true;
       }
     });
@@ -527,15 +597,54 @@
       statusNode.textContent = "ביום פתוח צריך שעת התחלה, שעת סיום מאוחרת ממנה, והפסקות בתוך הטווח.";
       return;
     }
-    var stored = readAvailability();
-    stored.weeks[iso(cursor)] = cleanWeek();
+    stored = readAvailability();
+    if (hoursMode === "standing") {
+      stored.standing = cleanWeek();
+      schedule.weekdays.forEach(function (day) {
+        stored.standing[day.id].blocked = [];
+      });
+    } else {
+      stored.weeks[iso(cursor)] = cleanWeek();
+      schedule.weekdays.forEach(function (day) {
+        delete stored.exceptions[iso(weekDate(day.id))];
+      });
+    }
     try {
-      writeAvailability(stored.weeks);
+      writeAvailability(stored);
     } catch (error) {
       statusNode.textContent = "לא ניתן לשמור במכשיר זה.";
       return;
     }
-    statusNode.textContent = "השעות נשמרו במכשיר זה בלבד. יומן הלקוחות לא עודכן.";
+    if (hoursMode === "week") {
+      weekIsOverride = true;
+    }
+    if (hoursMode === "standing") {
+      statusNode.textContent = "השעות הקבועות נשמרו במכשיר זה. לוח הלקוח במכשיר זה ישתמש בהן. אין סנכרון בין מכשירים, והתורים הקיימים לא בוטלו.";
+    } else {
+      statusNode.textContent = "השינוי נשמר רק לשבוע שנבחר, במכשיר זה. השעות הקבועות לא השתנו, ואין סנכרון בין מכשירים. התורים הקיימים לא בוטלו.";
+    }
+    renderWeek();
+    paintConflicts();
+  }
+
+  function clearWeekOverride() {
+    var statusNode = document.getElementById("week-status");
+    var stored = readAvailability();
+    delete stored.weeks[iso(cursor)];
+    schedule.weekdays.forEach(function (day) {
+      delete stored.exceptions[iso(weekDate(day.id))];
+    });
+    try {
+      writeAvailability(stored);
+    } catch (error) {
+      statusNode.textContent = "לא ניתן לשמור במכשיר זה.";
+      return;
+    }
+    weekIsOverride = false;
+    loadWeek();
+    statusNode.textContent = "השבוע חזר לשעות הקבועות. התורים הקיימים לא בוטלו.";
+    renderWeek();
+    paintConflicts();
   }
 
   function detailLines(order) {
@@ -908,6 +1017,23 @@
     renderWeek();
   });
   document.getElementById("week-save").addEventListener("click", saveWeek);
+  document.getElementById("week-clear").addEventListener("click", clearWeekOverride);
+  document.getElementById("hours-standing").addEventListener("click", function () {
+    hoursMode = "standing";
+    openDay = "";
+    loadWeek();
+    document.getElementById("week-status").textContent = "";
+    document.getElementById("week-conflicts").textContent = "";
+    renderWeek();
+  });
+  document.getElementById("hours-week").addEventListener("click", function () {
+    hoursMode = "week";
+    openDay = "";
+    loadWeek();
+    document.getElementById("week-status").textContent = "";
+    document.getElementById("week-conflicts").textContent = "";
+    renderWeek();
+  });
   document.getElementById("day-prev").addEventListener("click", function () {
     dayCursor = new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate() - 1);
     openOrder = "";

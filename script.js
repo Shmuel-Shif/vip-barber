@@ -257,6 +257,9 @@
       customer: order.customer || {},
       photo: order.photo || ""
     };
+    if (window.VIP_SCHEDULE && window.VIP_SCHEDULE.slotOpen && !window.VIP_SCHEDULE.slotOpen(saved.date, saved.time)) {
+      return null;
+    }
     list.unshift(saved);
     try {
       writeOrders(list);
@@ -615,33 +618,18 @@
   }
 
   function isClosed(date) {
-    var rule = schedule.standing ? schedule.standing[String(date.getDay())] : null;
-    return !!(rule && rule.status === "closed");
-  }
-
-  function slotPassed(date, slot) {
-    if (!date || iso(date) !== iso(todayStart)) {
-      return false;
-    }
-    var parts = String(slot || "").split(":");
-    if (parts.length < 2 || parts[0] === "") {
+    var day = schedule.dayFor ? schedule.dayFor(date) : null;
+    if (!day || day.status !== "hours") {
       return true;
     }
-    var moment = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Number(parts[0]), Number(parts[1]) || 0, 0, 0);
-    return isNaN(moment.getTime()) || moment.getTime() <= Date.now();
+    return schedule.openSlots(date, { ignoreTaken: true, ignorePast: true }).length === 0;
   }
 
   function slotsFor(date) {
-    if (!date || isClosed(date) || !schedule.standing) {
+    if (!date || !schedule.openSlots) {
       return [];
     }
-    var rule = schedule.standing[String(date.getDay())];
-    if (!rule || rule.status !== "hours" || !rule.slots) {
-      return [];
-    }
-    return rule.slots.filter(function (slot) {
-      return !slotPassed(date, slot);
-    });
+    return schedule.openSlots(date);
   }
 
   var saved = parse(draft.date);
@@ -668,11 +656,15 @@
     }
     var slots = slotsFor(date);
     if (!slots.length) {
-      if (iso(date) === iso(todayStart)) {
-        var note = document.createElement("p");
+      var note = document.createElement("p");
+      var hadHours = schedule.openSlots(date, { ignoreTaken: true, ignorePast: true }).length > 0;
+      var stillToday = schedule.openSlots(date, { ignoreTaken: true }).length > 0;
+      if (hadHours && !stillToday && iso(date) === iso(todayStart)) {
         note.textContent = "השעות להיום כבר עברו.";
-        times.appendChild(note);
+      } else {
+        note.textContent = "אין תורים פנויים ביום הזה. אפשר לבחור יום אחר.";
       }
+      times.appendChild(note);
       return;
     }
     var row = document.createElement("div");
@@ -1214,7 +1206,7 @@
       photo = "";
     }
     if (window.VIP_ORDERS) {
-      window.VIP_ORDERS.add({
+      var created = window.VIP_ORDERS.add({
         adults: draft.adults,
         children: draft.children,
         vip: draft.vip,
@@ -1224,6 +1216,12 @@
         customer: draft.submitted && (draft.submitted.fullName || draft.submitted.phone) ? draft.submitted : draft.customer,
         photo: photo
       });
+      if (!created) {
+        draft.time = "";
+        booking.write(draft);
+        window.location.href = "booking-next.html";
+        return;
+      }
     }
     if (modal && modal.showModal) {
       modal.showModal();
