@@ -1201,19 +1201,22 @@ body.nav-open {
 }
 
 body:has(.party) {
-  height: 100dvh;
-  overflow: hidden;
+  min-height: 100dvh;
+  min-height: 100svh;
+  overflow: visible;
 }
 
 .party {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
+  min-height: 100dvh;
+  min-height: 100svh;
+  height: auto;
+  max-height: none;
   margin: 0;
-  overflow: hidden;
-  padding: calc(var(--header-height) + var(--step-bar-height) + env(safe-area-inset-top) + 0.25rem) 1rem calc(0.4rem + env(safe-area-inset-bottom));
+  overflow: visible;
+  padding: calc(var(--header-height) + var(--step-bar-height) + env(safe-area-inset-top) + 0.25rem) 1rem calc(1.15rem + env(safe-area-inset-bottom));
   text-align: center;
 }
 
@@ -1364,14 +1367,23 @@ body:has(.party) {
 }
 
 .party__continue {
+  position: sticky;
+  bottom: calc(0.7rem + env(safe-area-inset-bottom));
+  z-index: 12;
   width: 100%;
-  min-height: 2.35rem;
-  margin-top: auto;
-  padding: 0.4rem 1rem;
+  min-height: 2.75rem;
+  margin-top: 0.9rem;
+  padding: 0.45rem 1rem;
 }
 
 .party__continue[aria-disabled="true"] {
   opacity: 0.4;
+}
+
+@media (max-width: 719px) {
+  .party {
+    padding-bottom: calc(3.25rem + env(safe-area-inset-bottom));
+  }
 }
 
 
@@ -2598,8 +2610,107 @@ body.admin .admin-dialog .btn {
   }
 }
 
-body.admin .admin-panel[hidden] {
+body.admin .admin-panel[hidden],
+body.admin #admin-app[hidden] {
   display: none !important;
+}
+
+body.admin-locked .site-header {
+  display: none;
+}
+
+body.admin-locked main {
+  display: flex;
+  align-items: center;
+  width: min(100%, 28rem);
+  min-height: 100dvh;
+  min-height: 100svh;
+  padding: calc(1.35rem + env(safe-area-inset-top)) 1rem calc(1.35rem + env(safe-area-inset-bottom));
+}
+
+.admin-login {
+  width: 100%;
+  text-align: center;
+}
+
+.admin-login__logo {
+  display: block;
+  width: auto;
+  height: 6.4rem;
+  margin: 0 auto 0.85rem;
+}
+
+.admin-login h1 {
+  margin: 0;
+  color: var(--gold-light);
+  font-family: var(--font-serif);
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  font-weight: 500;
+}
+
+.admin-login__note {
+  margin: 0.8rem 0 0;
+  color: var(--ivory-soft);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.admin-login .admin-field {
+  text-align: right;
+}
+
+.admin-login__secret {
+  display: flex;
+  align-items: stretch;
+  min-height: 2.85rem;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 0.75rem;
+  background: #111;
+}
+
+body.admin .admin-login__secret input {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  min-height: 2.85rem;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 0.75rem;
+}
+
+.admin-login__secret button {
+  flex: 0 0 auto;
+  min-width: 4.6rem;
+  min-height: 2.85rem;
+  border: 0;
+  border-inline-start: 1px solid rgba(196, 164, 106, 0.4);
+  background: transparent;
+  color: var(--gold-light);
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-login__error {
+  margin: 0.9rem 0 0;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid #a56a62;
+  border-radius: 0.75rem;
+  background: rgba(120, 48, 40, 0.35);
+  color: #f3d2cb;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.admin-login .btn {
+  margin-top: 1rem;
+}
+
+@media (min-width: 720px) {
+  .admin-login__logo {
+    height: 8rem;
+  }
 }
 
 body.admin .admin-hours {

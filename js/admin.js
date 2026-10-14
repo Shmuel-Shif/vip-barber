@@ -5,6 +5,67 @@
     return;
   }
 
+  var loginForm = document.getElementById("admin-login-form");
+  var passwordInput = document.getElementById("admin-password");
+  var passwordToggle = document.getElementById("admin-password-toggle");
+  var loginError = document.getElementById("admin-login-error");
+  var usernameInput = document.getElementById("admin-username");
+  var fixedUsername = window.VIP_DEMO && window.VIP_DEMO.owner && window.VIP_DEMO.owner.adminUsername
+    ? window.VIP_DEMO.owner.adminUsername
+    : "zeevi";
+
+  if (usernameInput) {
+    usernameInput.value = fixedUsername;
+  }
+
+  function showLoginError(message) {
+    if (!loginError) {
+      return;
+    }
+    loginError.hidden = false;
+    loginError.textContent = message;
+  }
+
+  if (passwordToggle && passwordInput) {
+    passwordToggle.addEventListener("click", function () {
+      var revealed = passwordInput.getAttribute("type") === "text";
+      passwordInput.setAttribute("type", revealed ? "password" : "text");
+      passwordToggle.textContent = revealed ? "הצגה" : "הסתרה";
+      passwordToggle.setAttribute("aria-pressed", revealed ? "false" : "true");
+      passwordToggle.setAttribute("aria-label", revealed ? "הצגת הסיסמה" : "הסתרת הסיסמה");
+    });
+  }
+
+  if (loginForm) {
+    loginForm.addEventListener("submit", function (event) {
+      var username = usernameInput ? usernameInput.value.trim() : "";
+      var passwordMissing = !passwordInput || passwordInput.value.length === 0;
+      event.preventDefault();
+      if (passwordInput) {
+        passwordInput.value = "";
+        passwordInput.setAttribute("type", "password");
+      }
+      if (passwordToggle) {
+        passwordToggle.textContent = "הצגה";
+        passwordToggle.setAttribute("aria-pressed", "false");
+        passwordToggle.setAttribute("aria-label", "הצגת הסיסמה");
+      }
+      if (!username) {
+        showLoginError("יש למלא את שם המשתמש.");
+        return;
+      }
+      if (passwordMissing) {
+        showLoginError("יש למלא את הסיסמה.");
+        return;
+      }
+      if (username !== fixedUsername) {
+        showLoginError("אין הרשמה למנהלים. חשבון המנהל הקבוע הוא " + fixedUsername + ".");
+        return;
+      }
+      showLoginError("ההתחברות עדיין לא מחוברת. זה מסך עיצוב בלבד ולא אבטחה: הסיסמה לא נבדקת ולא נשמרת. אזור הניהול יישאר סגור עד חיבור Supabase, ואז האימות והרשאת המנהל ייבדקו בשרת.");
+    });
+  }
+
   var root = document.getElementById("week-days");
   var schedule = window.VIP_SCHEDULE;
   var ordersApi = window.VIP_ORDERS;

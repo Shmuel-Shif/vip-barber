@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#070707">
-  <meta name="description" content="ניהול מקומי לזאבי הנאו. הנתונים נשמרים במכשיר זה בלבד, בלי שרת ובלי התחברות מאובטחת.">
+  <meta name="description" content="מסך התחברות לעיצוב אזור הניהול של זאבי הנאו. אין כאן אימות מאובטח עד חיבור השרת.">
   <title>ניהול — זאבי הנאו - VIP</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" type="image/png">
@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="style.css">
   <script>document.documentElement.classList.add("js");</script>
 </head>
-<body class="admin">
+<body class="admin admin-locked">
   <a class="skip-link" href="#content">דלג לתוכן</a>
   <header class="site-header">
     <a class="brand" href="index.html" aria-label="VIP, דף הבית">
@@ -25,6 +25,29 @@
     <p class="admin-mark">ניהול</p>
   </header>
   <main id="content">
+    <section class="admin-login" id="admin-login" aria-labelledby="admin-login-title">
+      <img class="admin-login__logo" src="assets/logo/logo.png" alt="לוגו VIP" width="1090" height="1183">
+      <h1 id="admin-login-title">אזור הניהול</h1>
+      <p class="admin-login__note">מסך עיצוב בלבד, לא אבטחה. הסיסמה לא נבדקת ולא נשמרת. חשבון המנהל הקבוע הוא zeevi, ואין הרשמה למנהלים נוספים. אחרי חיבור Supabase ההתחברות תיבדק בשרת.</p>
+      <form id="admin-login-form" method="post" action="admin.html" autocomplete="off" novalidate onsubmit="return false">
+        <label class="admin-field" for="admin-username">שם משתמש
+          <input id="admin-username" name="username" type="text" value="zeevi" maxlength="80" autocomplete="off" spellcheck="false" enterkeyhint="next">
+        </label>
+        <div class="admin-field">
+          <label for="admin-password">סיסמה</label>
+          <div class="admin-login__secret">
+            <input id="admin-password" name="password" type="password" maxlength="200" autocomplete="off" spellcheck="false" enterkeyhint="done">
+            <button type="button" id="admin-password-toggle" aria-controls="admin-password" aria-pressed="false" aria-label="הצגת הסיסמה">הצגה</button>
+          </div>
+        </div>
+        <p id="admin-login-error" class="admin-login__error" role="alert" hidden></p>
+        <button type="submit" class="btn btn--gold" id="admin-login-submit">התחברות</button>
+      </form>
+      <noscript>
+        <p class="admin-login__note">כדי להציג את המסך צריך לאפשר JavaScript. אין כאן התחברות לשרת.</p>
+      </noscript>
+    </section>
+    <div id="admin-app" hidden>
     <nav class="admin-nav" aria-label="ניווט ניהול">
       <button type="button" data-admin-panel="hours">שעות פעילות</button>
       <button type="button" data-admin-panel="day">הלוז היומי שלי</button>
@@ -133,6 +156,7 @@
     <noscript>
       <p class="admin-note">כדי להשתמש בניהול צריך לאפשר JavaScript. אין כאן חיבור לשרת.</p>
     </noscript>
+    </div>
   </main>
   <dialog class="admin-dialog" id="admin-confirm" aria-labelledby="admin-confirm-title">
     <h2 id="admin-confirm-title">לבטל את התור?</h2>

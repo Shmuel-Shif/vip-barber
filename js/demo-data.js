@@ -7,6 +7,8 @@ window.VIP_DEMO = {
   temporary: true,
   owner: {
     name: "זאבי הנאו",
+    // Fixed admin account name for the future server login. Not a password.
+    adminUsername: "zeevi",
     // WhatsApp number for wa.me: country code plus the mobile number, digits only.
     // No plus, spaces, or leading 0.
     whatsappPhone: "972512177021"
