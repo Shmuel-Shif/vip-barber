@@ -1395,27 +1395,85 @@
     return;
   }
 
+  var storageKey = "vip-install-choice";
   var deferred = null;
   var yes = document.getElementById("install-yes");
   var no = document.getElementById("install-no");
-  var installed = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+  function remembered() {
+    try {
+      return localStorage.getItem(storageKey) || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function remember(value) {
+    try {
+      localStorage.setItem(storageKey, value);
+    } catch (error) {
+      return;
+    }
+  }
+
+  function isInstalled() {
+    return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.navigator.standalone === true;
+  }
+
+  function hide() {
+    promptBox.hidden = true;
+  }
+
+  function alreadyInstalled() {
+    return isInstalled() || remembered() === "installed";
+  }
+
+  function show() {
+    if (alreadyInstalled()) {
+      hide();
+      return;
+    }
+    promptBox.hidden = false;
+    if (yes) {
+      yes.focus();
+    }
+  }
+
+  if (isInstalled()) {
+    remember("installed");
+    return;
+  }
+
+  if (alreadyInstalled()) {
+    return;
+  }
 
   window.addEventListener("beforeinstallprompt", function (event) {
     event.preventDefault();
     deferred = event;
   });
 
-  function hide() {
-    promptBox.hidden = true;
-  }
+  window.addEventListener("appinstalled", function () {
+    remember("installed");
+    hide();
+  });
 
-  if (installed) {
-    return;
-  }
-
-  promptBox.hidden = false;
-  if (yes) {
-    yes.focus();
+  if (navigator.getInstalledRelatedApps) {
+    navigator.getInstalledRelatedApps().then(function (apps) {
+      var found = apps && apps.some(function (app) {
+        return app.platform === "webapp";
+      });
+      if (found) {
+        remember("installed");
+        hide();
+        return;
+      }
+      show();
+    }).catch(function () {
+      show();
+    });
+  } else {
+    show();
   }
 
   no.addEventListener("click", hide);
@@ -1427,8 +1485,11 @@
   yes.addEventListener("click", function () {
     if (deferred) {
       deferred.prompt();
-      deferred.userChoice.then(function () {
+      deferred.userChoice.then(function (choice) {
         deferred = null;
+        if (choice && choice.outcome === "accepted") {
+          remember("installed");
+        }
         hide();
       });
       return;
