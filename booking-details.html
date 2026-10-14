@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="פרטי לקוח וכתובת להזמנה אצל זאבי הנאו. התור אינו מאושר.">
+  <title>פרטים לסיום ההזמנה — זאבי הנאו - VIP</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">דלג לתוכן</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="VIP, דף הבית">
+      <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="פתיחת תפריט">
+      <span class="hamburger" aria-hidden="true"></span>
+    </button>
+    <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
+      <a href="index.html">בית</a>
+      <a href="booking.html" aria-current="page">קבע תור</a>
+      <a href="about.html">אודות</a>
+      <a href="orders.html">ההזמנות שלי</a>
+    </nav>
+  </header>
+  <main id="content">
+    <form class="details" id="customer-form" novalidate>
+      <h1>פרטים לסיום ההזמנה</h1>
+      <p class="details__required">* שדה חובה</p>
+
+      <fieldset class="details__group">
+        <legend>פרטי הלקוח</legend>
+        <div class="field">
+          <label for="full-name">שם מלא <abbr title="שדה חובה">*</abbr></label>
+          <input id="full-name" name="full-name" type="text" autocomplete="name" required aria-required="true" aria-describedby="full-name-error" placeholder="לדוגמה: ישראל ישראלי">
+          <small id="full-name-error" class="field__error"></small>
+        </div>
+        <div class="field">
+          <label for="phone">מספר טלפון <abbr title="שדה חובה">*</abbr></label>
+          <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required aria-required="true" aria-describedby="phone-error" placeholder="לדוגמה: 050-0000000">
+          <small id="phone-error" class="field__error"></small>
+        </div>
+      </fieldset>
+
+      <fieldset class="details__group">
+        <legend>כתובת</legend>
+        <div class="field">
+          <label for="city">עיר <abbr title="שדה חובה">*</abbr></label>
+          <input id="city" name="city" type="text" autocomplete="address-level2" required aria-required="true" aria-describedby="city-error" placeholder="לדוגמה: תל אביב">
+          <small id="city-error" class="field__error"></small>
+        </div>
+        <div class="field">
+          <label for="street">רחוב <abbr title="שדה חובה">*</abbr></label>
+          <input id="street" name="street" type="text" autocomplete="address-line1" required aria-required="true" aria-describedby="street-error" placeholder="לדוגמה: הרצל">
+          <small id="street-error" class="field__error"></small>
+        </div>
+        <div class="field">
+          <label for="house-number">מספר בית <abbr title="שדה חובה">*</abbr></label>
+          <input id="house-number" name="house-number" type="text" autocomplete="on" required aria-required="true" aria-describedby="house-number-error" placeholder="לדוגמה: 12">
+          <small id="house-number-error" class="field__error"></small>
+        </div>
+        <div class="details__pair">
+          <div class="field">
+            <label for="entrance">כניסה</label>
+            <input id="entrance" name="entrance" type="text" aria-describedby="entrance-error" placeholder="לדוגמה: א">
+            <small id="entrance-error" class="field__error"></small>
+          </div>
+          <div class="field">
+            <label for="floor">קומה</label>
+            <input id="floor" name="floor" type="text" inputmode="numeric" aria-describedby="floor-error" placeholder="לדוגמה: 3">
+            <small id="floor-error" class="field__error"></small>
+          </div>
+        </div>
+        <div class="details__pair">
+          <div class="field">
+            <label for="apartment">מספר דירה</label>
+            <input id="apartment" name="apartment" type="text" aria-describedby="apartment-error" placeholder="לדוגמה: 8">
+            <small id="apartment-error" class="field__error"></small>
+          </div>
+          <div class="field">
+            <label for="entry-code">קוד כניסה לבניין</label>
+            <input id="entry-code" name="entry-code" type="text" autocomplete="off" aria-describedby="entry-code-error" placeholder="לדוגמה: 1234">
+            <small id="entry-code-error" class="field__error"></small>
+          </div>
+        </div>
+        <div class="field">
+          <label for="notes">הוראות הגעה והערות נוספות</label>
+          <textarea id="notes" name="notes" rows="4" aria-describedby="notes-error" placeholder="לדוגמה: השער השחור מימין לחניה"></textarea>
+          <small id="notes-error" class="field__error"></small>
+        </div>
+      </fieldset>
+
+      <section class="photo-panel" aria-labelledby="photo-title">
+        <h2 id="photo-title">תמונה של הכניסה לבניין</h2>
+        <p>התמונה תעזור לזאבי לזהות את הכניסה ולהגיע אליכם בקלות.</p>
+        <input class="file-input" id="photo-gallery-input" type="file" accept="image/*" tabindex="-1">
+        <input class="file-input" id="photo-camera-input" type="file" accept="image/*" capture="environment" tabindex="-1">
+        <figure id="photo-preview" hidden>
+          <img id="photo-image" alt="תצוגה מקדימה של הכניסה לבניין">
+        </figure>
+        <div class="details__choices" id="photo-actions">
+          <button type="button" class="btn btn--ghost" id="photo-gallery">בחירה מהגלריה</button>
+          <button type="button" class="btn btn--ghost" id="photo-camera">צילום במצלמה</button>
+        </div>
+        <button type="button" class="btn btn--ghost" id="photo-remove" hidden>הסרת תמונה</button>
+        <p id="photo-status" class="details__hint" role="status"></p>
+      </section>
+
+      <section class="notice" aria-labelledby="notice-title">
+        <h2 id="notice-title">חשוב לדעת לפני שממשיכים</h2>
+        <p>ההזמנה אינה סופית עד לקבלת אישור מזאבי. לאחר שליחת הבקשה, זאבי יצור איתך קשר בטלפון או בוואטסאפ כדי לאשר את מועד התור ואת פרטי ההגעה.</p>
+        <p>בחירת התאריך והשעה בשלב הזה אינה אישור סופי לתור.</p>
+      </section>
+
+      <section class="pay-panel" aria-labelledby="pay-title">
+        <h2 id="pay-title">איך משלמים? <abbr title="שדה חובה">*</abbr></h2>
+        <p>התשלום מתבצע לאחר התספורת בלבד. אין תשלום באתר ואין צורך להזין פרטי אשראי.</p>
+        <div class="pay-list" role="radiogroup" aria-labelledby="pay-title" aria-required="true">
+          <label class="pay-option">
+            <input type="radio" name="payment" value="paybox">
+            <span>PayBox</span>
+          </label>
+          <label class="pay-option">
+            <input type="radio" name="payment" value="cash">
+            <span>מזומן</span>
+          </label>
+          <label class="pay-option">
+            <input type="radio" name="payment" value="transfer">
+            <span>העברה בנקאית</span>
+          </label>
+        </div>
+        <small id="payment-error" class="field__error"></small>
+      </section>
+
+      <p class="details__hint">כדי להמשיך יש למלא את שדות החובה ולבחור איך משלמים.</p>
+      <button type="submit" class="btn btn--gold details__continue" id="details-continue" disabled>המשך לסיכום ההזמנה</button>
+      <noscript>
+        <p class="services-fallback">כדי למלא את הפרטים צריך לאפשר JavaScript. אין כאן שליחה לשרת.</p>
+      </noscript>
+    </form>
+  </main>
+  <script src="js/demo-data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

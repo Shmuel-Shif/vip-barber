@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="סיכום בקשת התור אצל זאבי הנאו. הבקשה לא נשלחה והתור אינו מאושר.">
+  <title>סיכום ההזמנה — זאבי הנאו - VIP</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">דלג לתוכן</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="VIP, דף הבית">
+      <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="פתיחת תפריט">
+      <span class="hamburger" aria-hidden="true"></span>
+    </button>
+    <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
+      <a href="index.html">בית</a>
+      <a href="booking.html" aria-current="page">קבע תור</a>
+      <a href="about.html">אודות</a>
+      <a href="orders.html">ההזמנות שלי</a>
+    </nav>
+  </header>
+  <main id="content">
+    <section class="details summary" id="booking-summary" aria-labelledby="summary-title">
+      <h1 id="summary-title">סיכום ההזמנה</h1>
+
+      <section class="notice" aria-labelledby="summary-notice-title">
+        <h2 id="summary-notice-title">התור עדיין לא אושר</h2>
+        <p>ההזמנה אינה סופית עד לקבלת אישור מזאבי. הבקשה לא נשלחה לשרת, והבחירה בתאריך ובשעה אינה אישור סופי לתור.</p>
+      </section>
+
+      <section class="details__group" aria-labelledby="summary-service-title">
+        <h2 id="summary-service-title">השירות</h2>
+        <div id="summary-service"></div>
+        <div id="booking-saved" class="summary__lines"></div>
+      </section>
+
+      <section class="details__group" aria-labelledby="summary-when-title">
+        <h2 id="summary-when-title">תאריך ושעה</h2>
+        <div id="summary-when" class="summary__lines"></div>
+      </section>
+
+      <section class="details__group" aria-labelledby="summary-customer-title">
+        <h2 id="summary-customer-title">פרטי הלקוח</h2>
+        <div id="summary-customer" class="summary__lines"></div>
+      </section>
+
+      <section class="details__group" aria-labelledby="summary-address-title">
+        <h2 id="summary-address-title">כתובת</h2>
+        <div id="summary-address" class="summary__lines"></div>
+      </section>
+
+      <section class="details__group" aria-labelledby="summary-photo-title">
+        <h2 id="summary-photo-title">תמונה של הכניסה לבניין</h2>
+        <div id="summary-photo" class="summary__lines"></div>
+      </section>
+
+      <section class="pay-panel" aria-labelledby="summary-pay-title">
+        <h2 id="summary-pay-title">איך משלמים?</h2>
+        <p>התשלום מתבצע לאחר התספורת בלבד. אין תשלום באתר ואין צורך להזין פרטי אשראי.</p>
+        <div id="summary-payment" class="summary__lines"></div>
+      </section>
+
+      <a class="btn btn--gold details__continue" href="booking-details.html">חזרה לעריכת הפרטים</a>
+    </section>
+  </main>
+  <script src="js/demo-data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

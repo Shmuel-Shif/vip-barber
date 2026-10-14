@@ -33,7 +33,6 @@
     </button>
     <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
       <a href="index.html" aria-current="page">בית</a>
-      <a href="services.html">שירותים</a>
       <a href="booking.html">קבע תור</a>
       <a href="about.html">אודות</a>
       <a href="orders.html">ההזמנות שלי</a>
@@ -77,12 +76,21 @@
 
         <div class="hero__actions">
           <div class="reveal">
-            <a class="btn btn--gold" href="services.html">קבע תור</a>
+            <a class="btn btn--gold" href="booking.html">קבע תור</a>
           </div>
         </div>
       </div>
     </section>
   </main>
+  <div class="install-prompt" id="install-prompt" hidden>
+    <div class="install-prompt__card" role="dialog" aria-modal="true" aria-labelledby="install-title">
+      <h2 id="install-title">האם ברצונך להוריד לטלפון?</h2>
+      <div class="install-prompt__actions">
+        <button type="button" class="btn btn--gold" id="install-yes">כן, להוריד</button>
+        <button type="button" class="btn btn--ghost" id="install-no">לא עכשיו</button>
+      </div>
+    </div>
+  </div>
   <script src="script.js"></script>
 </body>
 </html>

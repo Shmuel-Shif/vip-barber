@@ -118,8 +118,43 @@
     return Math.floor(number);
   }
 
+  function clipText(value, max) {
+    var text = typeof value === "string" ? value.trim() : "";
+    if (text.length > max) {
+      return text.slice(0, max);
+    }
+    return text;
+  }
+
+  function readCustomer(data) {
+    var source = data && data.customer && typeof data.customer === "object" ? data.customer : {};
+    return {
+      fullName: clipText(source.fullName, 80),
+      phone: clipText(source.phone, 20),
+      city: clipText(source.city, 60),
+      street: clipText(source.street, 80),
+      houseNumber: clipText(source.houseNumber, 20),
+      entrance: clipText(source.entrance, 20),
+      floor: clipText(source.floor, 10),
+      apartment: clipText(source.apartment, 20),
+      entryCode: clipText(source.entryCode, 20),
+      notes: clipText(source.notes, 400),
+      payment: source.payment === "paybox" || source.payment === "cash" || source.payment === "transfer" ? source.payment : ""
+    };
+  }
+
   function readBookingDraft() {
-    var empty = { serviceId: "", adults: 0, children: 0, vip: 0, beards: 0, date: "", time: "" };
+    var empty = {
+      serviceId: "",
+      adults: 0,
+      children: 0,
+      vip: 0,
+      beards: 0,
+      date: "",
+      time: "",
+      customer: readCustomer(null),
+      submitted: readCustomer(null)
+    };
     try {
       var raw = sessionStorage.getItem(storageKey);
       if (!raw) {
@@ -133,7 +168,9 @@
         vip: wholeCount(data.vip),
         beards: wholeCount(data.beards),
         date: typeof data.date === "string" ? data.date : "",
-        time: typeof data.time === "string" ? data.time : ""
+        time: typeof data.time === "string" ? data.time : "",
+        customer: readCustomer(data),
+        submitted: readCustomer({ customer: data.submitted })
       };
     } catch (error) {
       return empty;
@@ -146,6 +183,7 @@
     if (beards > people) {
       beards = people;
     }
+    var current = readBookingDraft();
     try {
       sessionStorage.setItem(storageKey, JSON.stringify({
         serviceId: typeof draft.serviceId === "string" ? draft.serviceId : "",
@@ -154,7 +192,9 @@
         vip: wholeCount(draft.vip),
         beards: beards,
         date: typeof draft.date === "string" ? draft.date : "",
-        time: typeof draft.time === "string" ? draft.time : ""
+        time: typeof draft.time === "string" ? draft.time : "",
+        customer: readCustomer(draft.customer ? draft : current),
+        submitted: readCustomer({ customer: draft.submitted || current.submitted })
       }));
     } catch (error) {
       return;
@@ -163,142 +203,10 @@
 
   window.VIP_BOOKING = {
     read: readBookingDraft,
-    write: writeBookingDraft
+    write: writeBookingDraft,
+    photoKey: "vip-booking-entrance-photo",
+    sentPhotoKey: "vip-booking-sent-photo"
   };
-})();
-
-(function () {
-  "use strict";
-
-  var catalog = document.getElementById("service-catalog");
-  var status = document.getElementById("service-selection");
-  if (!catalog || !status) {
-    return;
-  }
-
-  var data = window.VIP_DEMO;
-  var services = data && data.services ? data.services : [];
-  var selectedId = "";
-  var booking = window.VIP_BOOKING;
-
-  function priceLabel(service) {
-    if (service.priceOnRequest || service.priceIls === null || service.priceIls === undefined) {
-      return "מחיר בתיאום";
-    }
-    return service.priceIls + " ₪";
-  }
-
-  function paintSelection() {
-    var cards = catalog.querySelectorAll(".service-card");
-    Array.prototype.forEach.call(cards, function (card) {
-      var on = card.getAttribute("data-service-id") === selectedId;
-      card.classList.toggle("is-selected", on);
-      var button = card.querySelector("button");
-      if (button) {
-        button.setAttribute("aria-pressed", on ? "true" : "false");
-      }
-    });
-
-    if (booking) {
-      var draft = booking.read();
-      draft.serviceId = selectedId;
-      booking.write(draft);
-    }
-
-    if (!selectedId) {
-      status.textContent = "";
-      return;
-    }
-
-    var chosen = null;
-    services.forEach(function (service) {
-      if (service.id === selectedId) {
-        chosen = service;
-      }
-    });
-
-    if (!chosen) {
-      status.textContent = "";
-      return;
-    }
-
-    status.textContent = "נבחר: " + chosen.name;
-  }
-
-  var listed = services.filter(function (service) {
-    return !service.addon;
-  });
-
-  if (!listed.length) {
-    var empty = document.createElement("p");
-    empty.className = "services-fallback";
-    empty.textContent = "רשימת השירותים לא זמינה כרגע.";
-    catalog.appendChild(empty);
-    return;
-  }
-
-  listed.forEach(function (service) {
-    var card = document.createElement("article");
-    card.className = "service-card";
-    card.setAttribute("data-service-id", service.id);
-
-    var title = document.createElement("h2");
-    title.textContent = service.name;
-
-    var summary = document.createElement("p");
-    summary.className = "service-card__summary";
-    summary.textContent = service.summary || "";
-
-    var price = document.createElement("p");
-    price.className = "service-card__price";
-    if (service.priceOnRequest || service.priceIls === null || service.priceIls === undefined) {
-      price.classList.add("service-card__price--request");
-    }
-    price.textContent = priceLabel(service);
-
-    var button = document.createElement("button");
-    button.type = "button";
-    button.className = "btn btn--gold";
-    button.textContent = "בחירת השירות";
-    button.setAttribute("aria-pressed", "false");
-    button.setAttribute("aria-label", "בחירת השירות: " + service.name);
-    button.addEventListener("click", function () {
-      selectedId = service.id;
-      if (booking) {
-        var draft = booking.read();
-        draft.serviceId = service.id;
-        if (service.id === "mens-haircut" && draft.adults < 1) {
-          draft.adults = 1;
-        }
-        if (service.id === "kids-haircut" && draft.children < 1) {
-          draft.children = 1;
-        }
-        if (service.id === "vip-package" && draft.vip < 1) {
-          draft.vip = 1;
-        }
-        booking.write(draft);
-      }
-      paintSelection();
-      window.location.href = "booking.html";
-    });
-
-    card.appendChild(title);
-    card.appendChild(summary);
-    card.appendChild(price);
-    card.appendChild(button);
-    catalog.appendChild(card);
-  });
-
-  if (booking) {
-    var saved = booking.read();
-    var savedIsListed = listed.some(function (service) {
-      return service.id === saved.serviceId;
-    });
-    if (savedIsListed) {
-      selectedId = saved.serviceId;
-      paintSelection();
-    }
-  }
 })();
 
 (function () {
@@ -651,6 +559,15 @@
     view = new Date(view.getFullYear(), view.getMonth() + 1, 1);
     render();
   });
+  if (continueButton) {
+    continueButton.addEventListener("click", function () {
+      if (!draft.date || !draft.time) {
+        return;
+      }
+      booking.write(draft);
+      window.location.href = "booking-details.html";
+    });
+  }
   render();
 })();
 
@@ -809,4 +726,492 @@
 
   loadWeek();
   render();
+})();
+
+(function () {
+  "use strict";
+
+  var form = document.getElementById("customer-form");
+  var booking = window.VIP_BOOKING;
+  if (!form || !booking) {
+    return;
+  }
+
+  var draft = booking.read();
+  var customer = draft.customer;
+  var fields = {
+    fullName: document.getElementById("full-name"),
+    phone: document.getElementById("phone"),
+    city: document.getElementById("city"),
+    street: document.getElementById("street"),
+    houseNumber: document.getElementById("house-number"),
+    entrance: document.getElementById("entrance"),
+    floor: document.getElementById("floor"),
+    apartment: document.getElementById("apartment"),
+    entryCode: document.getElementById("entry-code"),
+    notes: document.getElementById("notes")
+  };
+  var continueButton = document.getElementById("details-continue");
+  var preview = document.getElementById("photo-preview");
+  var previewImage = document.getElementById("photo-image");
+  var photoStatus = document.getElementById("photo-status");
+  var removePhoto = document.getElementById("photo-remove");
+  var galleryInput = document.getElementById("photo-gallery-input");
+  var cameraInput = document.getElementById("photo-camera-input");
+  var paymentInputs = form.querySelectorAll("input[name='payment']");
+  var paymentError = document.getElementById("payment-error");
+  var touched = {};
+
+  function digits(value) {
+    return String(value || "").replace(/\D/g, "");
+  }
+
+  function phoneOk(value) {
+    var count = digits(value).length;
+    return count >= 9 && count <= 15;
+  }
+
+  function readFields() {
+    return {
+      fullName: fields.fullName.value,
+      phone: fields.phone.value,
+      city: fields.city.value,
+      street: fields.street.value,
+      houseNumber: fields.houseNumber.value,
+      entrance: fields.entrance.value,
+      floor: fields.floor.value,
+      apartment: fields.apartment.value,
+      entryCode: fields.entryCode.value,
+      notes: fields.notes.value,
+      payment: selectedPayment()
+    };
+  }
+
+  function selectedPayment() {
+    var chosen = "";
+    Array.prototype.forEach.call(paymentInputs, function (input) {
+      if (input.checked) {
+        chosen = input.value;
+      }
+    });
+    return chosen;
+  }
+
+  function requirementError(name, value) {
+    if (name === "fullName" && value.fullName.trim().length < 2) {
+      return "יש להזין שם מלא.";
+    }
+    if (name === "phone" && !phoneOk(value.phone)) {
+      return "יש להזין מספר טלפון תקין.";
+    }
+    if (name === "city" && value.city.trim().length < 2) {
+      return "יש להזין עיר.";
+    }
+    if (name === "street" && value.street.trim().length < 2) {
+      return "יש להזין רחוב.";
+    }
+    if (name === "houseNumber" && value.houseNumber.trim().length < 1) {
+      return "יש להזין מספר בית.";
+    }
+    if (name === "payment" && value.payment !== "paybox" && value.payment !== "cash" && value.payment !== "transfer") {
+      return "יש לבחור איך משלמים.";
+    }
+    return "";
+  }
+
+  function ready(value) {
+    return !requirementError("fullName", value) && !requirementError("phone", value) && !requirementError("city", value) && !requirementError("street", value) && !requirementError("houseNumber", value) && !requirementError("payment", value);
+  }
+
+  function paintField(name, value, show) {
+    var input = fields[name];
+    var slot = document.getElementById(input.id + "-error");
+    var message = show ? requirementError(name, value) : "";
+    if (message) {
+      input.setAttribute("aria-invalid", "true");
+    } else {
+      input.removeAttribute("aria-invalid");
+    }
+    if (slot) {
+      slot.textContent = message;
+    }
+  }
+
+  function paint() {
+    var value = readFields();
+    Object.keys(fields).forEach(function (name) {
+      if (requirementError(name, value) === "" || touched[name]) {
+        paintField(name, value, !!touched[name]);
+      }
+    });
+    if (paymentError) {
+      paymentError.textContent = touched.payment ? requirementError("payment", value) : "";
+    }
+    var ok = ready(value);
+    continueButton.disabled = !ok;
+    continueButton.setAttribute("aria-disabled", ok ? "false" : "true");
+  }
+
+  function showPhoto(url) {
+    var panel = preview.closest(".photo-panel");
+    if (!url) {
+      preview.hidden = true;
+      previewImage.removeAttribute("src");
+      removePhoto.hidden = true;
+      if (panel) {
+        panel.classList.remove("is-ready");
+      }
+      return;
+    }
+    previewImage.src = url;
+    preview.hidden = false;
+    removePhoto.hidden = false;
+    if (panel) {
+      panel.classList.add("is-ready");
+    }
+  }
+
+  function storePhoto(file) {
+    if (!file || file.type.indexOf("image/") !== 0) {
+      photoStatus.textContent = "אפשר לבחור קובץ תמונה בלבד.";
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var image = new Image();
+      image.onload = function () {
+        var maxSide = 1280;
+        var scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        var context = canvas.getContext("2d");
+        if (!context) {
+          photoStatus.textContent = "לא ניתן להכין תצוגה מקדימה בדפדפן זה.";
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        var url = canvas.toDataURL("image/jpeg", 0.72);
+        try {
+          sessionStorage.setItem(booking.photoKey, url);
+        } catch (error) {
+          photoStatus.textContent = "התמונה גדולה מדי לשמירה בדפדפן. אפשר לבחור תמונה קטנה יותר.";
+          return;
+        }
+        photoStatus.textContent = "התמונה נשמרה במכשיר הזה בלבד.";
+        showPhoto(url);
+      };
+      image.onerror = function () {
+        photoStatus.textContent = "לא ניתן לקרוא את התמונה.";
+      };
+      image.src = reader.result;
+    };
+    reader.onerror = function () {
+      photoStatus.textContent = "לא ניתן לקרוא את התמונה.";
+    };
+    reader.readAsDataURL(file);
+  }
+
+  Object.keys(fields).forEach(function (name) {
+    fields[name].value = customer[name] || "";
+    fields[name].addEventListener("input", paint);
+    fields[name].addEventListener("blur", function () {
+      touched[name] = true;
+      paint();
+    });
+  });
+  Array.prototype.forEach.call(paymentInputs, function (input) {
+    input.checked = input.value === customer.payment;
+    input.addEventListener("change", function () {
+      touched.payment = true;
+      paint();
+    });
+  });
+
+  document.getElementById("photo-gallery").addEventListener("click", function () {
+    galleryInput.click();
+  });
+  document.getElementById("photo-camera").addEventListener("click", function () {
+    cameraInput.click();
+  });
+  galleryInput.addEventListener("change", function () {
+    storePhoto(galleryInput.files && galleryInput.files[0]);
+    galleryInput.value = "";
+  });
+  cameraInput.addEventListener("change", function () {
+    storePhoto(cameraInput.files && cameraInput.files[0]);
+    cameraInput.value = "";
+  });
+  removePhoto.addEventListener("click", function () {
+    try {
+      sessionStorage.removeItem(booking.photoKey);
+    } catch (error) {
+      return;
+    }
+    photoStatus.textContent = "התמונה הוסרה מהמכשיר הזה.";
+    showPhoto("");
+  });
+
+  try {
+    showPhoto(sessionStorage.getItem(booking.photoKey) || "");
+  } catch (error) {
+    showPhoto("");
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    Object.keys(fields).forEach(function (name) {
+      touched[name] = true;
+    });
+    touched.payment = true;
+    paint();
+    if (!ready(readFields())) {
+      return;
+    }
+    draft.submitted = readFields();
+    draft.customer = {
+      fullName: "",
+      phone: "",
+      city: "",
+      street: "",
+      houseNumber: "",
+      entrance: "",
+      floor: "",
+      apartment: "",
+      entryCode: "",
+      notes: "",
+      payment: ""
+    };
+    booking.write(draft);
+    try {
+      var sentPhoto = sessionStorage.getItem(booking.photoKey) || "";
+      if (sentPhoto) {
+        sessionStorage.setItem(booking.sentPhotoKey, sentPhoto);
+      } else {
+        sessionStorage.removeItem(booking.sentPhotoKey);
+      }
+      sessionStorage.removeItem(booking.photoKey);
+    } catch (error) {
+      sentPhoto = "";
+    }
+    form.reset();
+    window.location.href = "booking-summary.html";
+  });
+
+  paint();
+})();
+
+(function () {
+  "use strict";
+
+  var root = document.getElementById("booking-summary");
+  var booking = window.VIP_BOOKING;
+  if (!root || !booking) {
+    return;
+  }
+
+  var draft = booking.read();
+  var customer = draft.submitted && (draft.submitted.fullName || draft.submitted.phone || draft.submitted.payment) ? draft.submitted : draft.customer;
+  var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  var when = document.getElementById("summary-when");
+  var who = document.getElementById("summary-customer");
+  var address = document.getElementById("summary-address");
+  var photo = document.getElementById("summary-photo");
+  var services = window.VIP_DEMO && window.VIP_DEMO.services ? window.VIP_DEMO.services : [];
+
+  function line(parent, text) {
+    var paragraph = document.createElement("p");
+    paragraph.textContent = text;
+    parent.appendChild(paragraph);
+  }
+
+  function serviceName() {
+    var name = "";
+    services.forEach(function (service) {
+      if (service.id === draft.serviceId) {
+        name = service.name;
+      }
+    });
+    return name;
+  }
+
+  var chosen = serviceName();
+  if (chosen) {
+    line(document.getElementById("summary-service"), "שירות שנבחר: " + chosen);
+  }
+
+  var parts = String(draft.date || "").split("-");
+  var dateLabel = "";
+  if (parts.length === 3) {
+    var month = Number(parts[1]);
+    dateLabel = Number(parts[2]) + " ב" + (months[month - 1] || "") + " " + parts[0];
+  }
+  if (dateLabel && draft.time) {
+    line(when, dateLabel + ", בשעה " + draft.time);
+    line(when, "בחירת התאריך והשעה אינה אישור סופי לתור.");
+  } else {
+    line(when, "לא נבחרו תאריך ושעה.");
+  }
+
+  if (customer.fullName) {
+    line(who, "שם: " + customer.fullName);
+  }
+  if (customer.phone) {
+    line(who, "טלפון: " + customer.phone);
+  }
+  if (!customer.fullName && !customer.phone) {
+    line(who, "לא מולאו פרטי לקוח.");
+  }
+
+  var streetLine = customer.street;
+  if (customer.houseNumber) {
+    streetLine = streetLine ? streetLine + " " + customer.houseNumber : customer.houseNumber;
+  }
+  var fullAddress = customer.city ? (streetLine ? streetLine + ", " + customer.city : customer.city) : streetLine;
+  if (fullAddress) {
+    line(address, fullAddress);
+  } else {
+    line(address, "לא הוזנה כתובת.");
+  }
+  if (customer.entrance) {
+    line(address, "כניסה: " + customer.entrance);
+  }
+  if (customer.floor) {
+    line(address, "קומה: " + customer.floor);
+  }
+  if (customer.apartment) {
+    line(address, "דירה: " + customer.apartment);
+  }
+  if (customer.entryCode) {
+    line(address, "קוד כניסה: " + customer.entryCode);
+  }
+  if (customer.notes) {
+    line(address, "הערות: " + customer.notes);
+  }
+  var paymentNames = { paybox: "PayBox", cash: "מזומן", transfer: "העברה בנקאית" };
+  var paymentSummary = document.getElementById("summary-payment");
+  if (paymentSummary) {
+    line(paymentSummary, paymentNames[customer.payment] ? "נבחר: " + paymentNames[customer.payment] : "לא נבחר אמצעי תשלום.");
+  }
+
+  var storedPhoto = "";
+  try {
+    storedPhoto = sessionStorage.getItem(booking.sentPhotoKey) || "";
+  } catch (error) {
+    storedPhoto = "";
+  }
+  if (storedPhoto) {
+    var image = document.createElement("img");
+    image.src = storedPhoto;
+    image.alt = "תמונת הכניסה לבניין שנשמרה במכשיר";
+    photo.appendChild(image);
+  } else {
+    line(photo, "לא נוספה תמונת כניסה.");
+  }
+})();
+
+(function () {
+  "use strict";
+
+  var header = document.querySelector(".site-header");
+  var nav = document.getElementById("site-nav");
+  if (!header || !nav) {
+    return;
+  }
+
+  var steps = ["booking.html", "booking-next.html", "booking-details.html", "booking-summary.html"];
+  var file = window.location.pathname.split("/").pop();
+  if (!file || file === "index.html") {
+    return;
+  }
+  var current = steps.indexOf(file);
+  var total = steps.length;
+  var bar = document.createElement("div");
+  var label = document.createElement("p");
+  var track = document.createElement("div");
+  var index;
+
+  bar.className = "step-progress";
+  label.className = "step-progress__label";
+  track.className = "step-progress__track";
+  if (current === -1) {
+    label.textContent = total + " שלבים";
+    bar.setAttribute("aria-label", total + " שלבים להזמנה");
+  } else {
+    label.textContent = "שלב " + (current + 1) + " מתוך " + total;
+    bar.setAttribute("aria-label", label.textContent);
+  }
+  for (index = 0; index < total; index += 1) {
+    var part = document.createElement("span");
+    if (current !== -1 && index <= current) {
+      part.className = "is-done";
+    }
+    track.appendChild(part);
+  }
+  bar.appendChild(label);
+  bar.appendChild(track);
+  header.insertAdjacentElement("afterend", bar);
+
+  function place() {
+    bar.style.top = header.offsetHeight + "px";
+  }
+
+  place();
+  window.addEventListener("resize", place);
+})();
+
+(function () {
+  "use strict";
+
+  var promptBox = document.getElementById("install-prompt");
+  if (!promptBox) {
+    return;
+  }
+
+  var deferred = null;
+  var yes = document.getElementById("install-yes");
+  var no = document.getElementById("install-no");
+  var installed = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+  window.addEventListener("beforeinstallprompt", function (event) {
+    event.preventDefault();
+    deferred = event;
+  });
+
+  function hide() {
+    promptBox.hidden = true;
+  }
+
+  if (installed) {
+    return;
+  }
+
+  promptBox.hidden = false;
+  if (yes) {
+    yes.focus();
+  }
+
+  no.addEventListener("click", hide);
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      hide();
+    }
+  });
+  yes.addEventListener("click", function () {
+    if (deferred) {
+      deferred.prompt();
+      deferred.userChoice.then(function () {
+        deferred = null;
+        hide();
+      });
+      return;
+    }
+    var ios = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    var note = document.createElement("p");
+    note.textContent = ios
+      ? "באייפון: לחצו על כפתור השיתוף בדפדפן, ואז על „הוסף למסך הבית”."
+      : "אם הדפדפן מציע התקנה, היא נמצאת בתפריט הדפדפן: התקנת אפליקציה או הוספה למסך הבית.";
+    yes.parentNode.parentNode.insertBefore(note, yes.parentNode);
+    yes.hidden = true;
+  });
 })();
