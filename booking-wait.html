@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="הבקשה ממתינה לאישור של זאבי. התור אינו מאושר.">
+  <title>הבקשה שלך ממתינה לאישור — זאבי הנאו - VIP</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">דלג לתוכן</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="VIP, דף הבית">
+      <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="פתיחת תפריט">
+      <span class="hamburger" aria-hidden="true"></span>
+    </button>
+    <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
+      <a href="index.html">בית</a>
+      <a href="booking.html" aria-current="page">קבע תור</a>
+      <a href="orders.html">ההזמנות שלי</a>
+    </nav>
+  </header>
+  <main id="content">
+    <section class="details" aria-labelledby="wait-title">
+      <h1 id="wait-title">הבקשה שלך ממתינה לאישור</h1>
+      <section class="notice" aria-labelledby="wait-note-title">
+        <h2 id="wait-note-title">התור עדיין לא אושר.</h2>
+        <p>הבקשה הוכנה לשליחה לזאבי. לאחר שליחת ההודעה בוואטסאפ, זאבי יחזור אליך בטלפון או בוואטסאפ כדי לאשר את מועד התור ופרטי ההגעה.</p>
+        <p>כדי שהבקשה תגיע לזאבי, יש ללחוץ על שליחה בתוך וואטסאפ. פתיחת וואטסאפ לבדה אינה שולחת את ההודעה.</p>
+      </section>
+      <section class="pay-panel" aria-labelledby="wait-pay-title">
+        <h2 id="wait-pay-title">התשלום מתבצע לאחר התספורת בלבד.</h2>
+        <ul class="pay-list">
+          <li class="pay-option"><span>PayBox</span></li>
+          <li class="pay-option"><span>מזומן</span></li>
+          <li class="pay-option"><span>העברה בנקאית</span></li>
+        </ul>
+      </section>
+      <a class="btn btn--gold details__continue" href="booking-summary.html?stay=1">חזרה לסיכום ההזמנה</a>
+      <a class="btn btn--ghost details__continue" href="booking-details.html?edit=1">עריכת פרטים</a>
+    </section>
+  </main>
+  <script src="js/demo-data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

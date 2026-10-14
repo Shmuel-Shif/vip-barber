@@ -28,7 +28,6 @@
     <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
       <a href="index.html">בית</a>
       <a href="booking.html" aria-current="page">קבע תור</a>
-      <a href="about.html">אודות</a>
       <a href="orders.html">ההזמנות שלי</a>
     </nav>
   </header>
@@ -73,7 +72,9 @@
         <div id="summary-payment" class="summary__lines"></div>
       </section>
 
-      <a class="btn btn--gold details__continue" href="booking-details.html">חזרה לעריכת הפרטים</a>
+      <p id="send-note" class="details__hint">הלחיצה פותחת את וואטסאפ עם הודעה מוכנה. השליחה עצמה מתבצעת רק בתוך וואטסאפ.</p>
+      <a class="btn btn--ghost details__continue" href="booking-details.html?edit=1">חזרה לעריכת הפרטים</a>
+      <button type="button" class="btn btn--gold summary__send" id="send-request">שליחת בקשת תור</button>
     </section>
   </main>
   <script src="js/demo-data.js"></script>

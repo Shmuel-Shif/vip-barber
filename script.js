@@ -739,6 +739,17 @@
 
   var draft = booking.read();
   var customer = draft.customer;
+  if (window.location.search.indexOf("edit=1") !== -1 && draft.submitted && (draft.submitted.fullName || draft.submitted.phone)) {
+    customer = draft.submitted;
+    try {
+      var sentPhoto = sessionStorage.getItem(booking.sentPhotoKey) || "";
+      if (sentPhoto && !sessionStorage.getItem(booking.photoKey)) {
+        sessionStorage.setItem(booking.photoKey, sentPhoto);
+      }
+    } catch (error) {
+      customer = draft.submitted;
+    }
+  }
   var fields = {
     fullName: document.getElementById("full-name"),
     phone: document.getElementById("phone"),
@@ -1124,7 +1135,7 @@
   if (!file || file === "index.html") {
     return;
   }
-  var current = steps.indexOf(file);
+  var current = file === "booking-wait.html" ? steps.length - 1 : steps.indexOf(file);
   var total = steps.length;
   var bar = document.createElement("div");
   var label = document.createElement("p");
@@ -1158,6 +1169,138 @@
 
   place();
   window.addEventListener("resize", place);
+})();
+
+(function () {
+  "use strict";
+
+  var button = document.getElementById("send-request");
+  var booking = window.VIP_BOOKING;
+  if (!button || !booking) {
+    return;
+  }
+
+  var note = document.getElementById("send-note");
+  var demo = window.VIP_DEMO || {};
+  var owner = demo.owner || {};
+  var phone = String(owner.whatsappPhone || "").replace(/\D/g, "");
+  var draft = booking.read();
+  var customer = draft.submitted && (draft.submitted.fullName || draft.submitted.phone || draft.submitted.payment) ? draft.submitted : draft.customer;
+  var services = demo.services || [];
+  var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  var paymentNames = { paybox: "PayBox", cash: "מזומן", transfer: "העברה בנקאית" };
+
+  function serviceName(id) {
+    var name = "";
+    services.forEach(function (service) {
+      if (service.id === id) {
+        name = service.name;
+      }
+    });
+    return name;
+  }
+
+  function priceOf(id) {
+    var amount = null;
+    services.forEach(function (service) {
+      if (service.id === id && !service.priceOnRequest && service.priceIls !== null && service.priceIls !== undefined) {
+        amount = service.priceIls;
+      }
+    });
+    return amount;
+  }
+
+  if (!phone) {
+    button.disabled = true;
+    if (note) {
+      note.textContent = "הכפתור עדיין לא יכול לפתוח את וואטסאפ. צריך למלא את המספר של זאבי בשדה whatsappPhone בקובץ js/demo-data.js, ספרות בלבד עם קידומת 972 ובלי אפס בהתחלה.";
+    }
+  }
+
+  function message() {
+    var lines = [];
+    lines.push("בקשת תור — VIP");
+    lines.push("זו בקשה בלבד. התור עדיין לא אושר, והשליחה מתבצעת רק בלחיצה על שליחה בוואטסאפ.");
+    lines.push("");
+    lines.push("שירותים:");
+    var chosen = serviceName(draft.serviceId);
+    if (chosen) {
+      lines.push(chosen);
+    }
+    if (draft.adults > 0) {
+      var adultPrice = priceOf("mens-haircut");
+      lines.push("מבוגרים: " + draft.adults + (adultPrice === null ? "" : " (" + (draft.adults * adultPrice) + " ₪)"));
+    }
+    if (draft.children > 0) {
+      var childPrice = priceOf("kids-haircut");
+      lines.push("ילדים: " + draft.children + (childPrice === null ? "" : " (" + (draft.children * childPrice) + " ₪)"));
+    }
+    if (draft.vip > 0) {
+      lines.push("חבילת VIP: " + draft.vip + " (מחיר בתיאום)");
+    }
+    if (draft.beards > 0) {
+      var beardPrice = priceOf("beard");
+      lines.push("סידור זקן: " + draft.beards + (beardPrice === null ? "" : " (" + (draft.beards * beardPrice) + " ₪)"));
+    }
+    if (!draft.adults && !draft.children && !draft.vip && !draft.beards) {
+      lines.push("לא נבחרה כמות.");
+    }
+    lines.push("");
+    var parts = String(draft.date || "").split("-");
+    if (parts.length === 3 && draft.time) {
+      var month = Number(parts[1]);
+      lines.push("תאריך: " + Number(parts[2]) + " ב" + (months[month - 1] || "") + " " + parts[0]);
+      lines.push("שעה: " + draft.time);
+    } else {
+      lines.push("תאריך ושעה: לא נבחרו.");
+    }
+    lines.push("");
+    lines.push("שם: " + (customer.fullName || "לא הוזן"));
+    lines.push("טלפון: " + (customer.phone || "לא הוזן"));
+    var streetLine = customer.street || "";
+    if (customer.houseNumber) {
+      streetLine = streetLine ? streetLine + " " + customer.houseNumber : customer.houseNumber;
+    }
+    var fullAddress = customer.city ? (streetLine ? streetLine + ", " + customer.city : customer.city) : streetLine;
+    lines.push("כתובת: " + (fullAddress || "לא הוזנה"));
+    if (customer.entrance) {
+      lines.push("כניסה: " + customer.entrance);
+    }
+    if (customer.floor) {
+      lines.push("קומה: " + customer.floor);
+    }
+    if (customer.apartment) {
+      lines.push("דירה: " + customer.apartment);
+    }
+    if (customer.entryCode) {
+      lines.push("קוד כניסה: " + customer.entryCode);
+    }
+    lines.push("הערות הגעה: " + (customer.notes || "אין"));
+    lines.push("תשלום לאחר התספורת: " + (paymentNames[customer.payment] || "לא נבחר"));
+    lines.push("אין תשלום באתר.");
+    return lines.join("\n");
+  }
+
+  function goToWaiting() {
+    if (sessionStorage.getItem("vip-whatsapp-prepared") === "1" && window.location.search.indexOf("stay=1") === -1) {
+      window.location.replace("booking-wait.html");
+    }
+  }
+
+  window.addEventListener("pageshow", goToWaiting);
+
+  button.addEventListener("click", function () {
+    if (!phone) {
+      return;
+    }
+    booking.write(draft);
+    try {
+      sessionStorage.setItem("vip-whatsapp-prepared", "1");
+    } catch (error) {
+      return;
+    }
+    window.location.href = "https://wa.me/" + phone + "?text=" + encodeURIComponent(message());
+  });
 })();
 
 (function () {
