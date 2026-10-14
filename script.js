@@ -1065,8 +1065,9 @@
       payment: ""
     };
     booking.write(draft);
+    var sentPhoto = "";
     try {
-      var sentPhoto = sessionStorage.getItem(booking.photoKey) || "";
+      sentPhoto = sessionStorage.getItem(booking.photoKey) || "";
       if (sentPhoto) {
         sessionStorage.setItem(booking.sentPhotoKey, sentPhoto);
       } else {
@@ -1127,7 +1128,7 @@
   }
 
   var chosen = serviceName();
-  if (chosen) {
+  if (chosen && document.getElementById("summary-service")) {
     line(document.getElementById("summary-service"), "שירות שנבחר: " + chosen);
   }
 
@@ -1200,6 +1201,51 @@
 (function () {
   "use strict";
 
+  var button = document.getElementById("send-request");
+  var booking = window.VIP_BOOKING;
+  if (!button || !booking) {
+    return;
+  }
+
+  var draft = booking.read();
+  var modal = document.getElementById("sent-modal");
+  var closeModal = document.getElementById("sent-close");
+
+  button.addEventListener("click", function () {
+    var photo = "";
+    booking.write(draft);
+    try {
+      photo = sessionStorage.getItem(booking.sentPhotoKey) || "";
+    } catch (error) {
+      photo = "";
+    }
+    if (window.VIP_ORDERS) {
+      window.VIP_ORDERS.add({
+        adults: draft.adults,
+        children: draft.children,
+        vip: draft.vip,
+        beards: draft.beards,
+        date: draft.date,
+        time: draft.time,
+        customer: draft.submitted && (draft.submitted.fullName || draft.submitted.phone) ? draft.submitted : draft.customer,
+        photo: photo
+      });
+    }
+    if (modal && modal.showModal) {
+      modal.showModal();
+    }
+  });
+
+  if (closeModal) {
+    closeModal.addEventListener("click", function () {
+      window.location.href = "orders.html";
+    });
+  }
+})();
+
+(function () {
+  "use strict";
+
   var header = document.querySelector(".site-header");
   var nav = document.getElementById("site-nav");
   if (!header || !nav) {
@@ -1245,51 +1291,6 @@
 
   place();
   window.addEventListener("resize", place);
-})();
-
-(function () {
-  "use strict";
-
-  var button = document.getElementById("send-request");
-  var booking = window.VIP_BOOKING;
-  if (!button || !booking) {
-    return;
-  }
-
-  var draft = booking.read();
-  var modal = document.getElementById("sent-modal");
-  var closeModal = document.getElementById("sent-close");
-
-  button.addEventListener("click", function () {
-    var photo = "";
-    booking.write(draft);
-    try {
-      photo = sessionStorage.getItem(booking.sentPhotoKey) || "";
-    } catch (error) {
-      photo = "";
-    }
-    if (window.VIP_ORDERS) {
-      window.VIP_ORDERS.add({
-        adults: draft.adults,
-        children: draft.children,
-        vip: draft.vip,
-        beards: draft.beards,
-        date: draft.date,
-        time: draft.time,
-        customer: draft.submitted && (draft.submitted.fullName || draft.submitted.phone) ? draft.submitted : draft.customer,
-        photo: photo
-      });
-    }
-    if (modal && modal.showModal) {
-      modal.showModal();
-    }
-  });
-
-  if (closeModal) {
-    closeModal.addEventListener("click", function () {
-      window.location.href = "orders.html";
-    });
-  }
 })();
 
 (function () {
@@ -1515,4 +1516,192 @@
     yes.parentNode.parentNode.insertBefore(note, yes.parentNode);
     yes.hidden = true;
   });
+})();
+
+(function () {
+  "use strict";
+
+  var box = document.getElementById("notify-prompt");
+  var install = document.getElementById("install-prompt");
+  if (!box) {
+    return;
+  }
+
+  var storageKey = "vip-notify-choice";
+  var yes = document.getElementById("notify-yes");
+  var later = document.getElementById("notify-later");
+  var text = document.getElementById("notify-text");
+  var shown = false;
+
+  function remembered() {
+    try {
+      return localStorage.getItem(storageKey) || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function remember(value) {
+    try {
+      localStorage.setItem(storageKey, value);
+    } catch (error) {
+      return;
+    }
+  }
+
+  function standalone() {
+    return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.navigator.standalone === true;
+  }
+
+  function installFinished() {
+    var choice = "";
+    try {
+      choice = localStorage.getItem("vip-install-choice") || "";
+    } catch (error) {
+      choice = "";
+    }
+    return standalone() || choice === "installed";
+  }
+
+  function permission() {
+    if (!("Notification" in window)) {
+      return "unsupported";
+    }
+    return Notification.permission;
+  }
+
+  function iosBrowser() {
+    return /iphone|ipad|ipod/i.test(window.navigator.userAgent) && !standalone();
+  }
+
+  function blockedReason() {
+    if (!("Notification" in window)) {
+      return "הדפדפן הזה לא תומך בהתראות, ולכן אי אפשר להפעיל אותן כאן.";
+    }
+    if (iosBrowser()) {
+      return "באייפון ההתראות זמינות רק אחרי הוספת האתר למסך הבית ופתיחתו מהאייקון.";
+    }
+    return "";
+  }
+
+  function shouldOffer() {
+    var choice = remembered();
+    var state = permission();
+    if (choice === "later" || choice === "denied") {
+      return false;
+    }
+    if (state === "granted" || state === "denied") {
+      return false;
+    }
+    return true;
+  }
+
+  function hide() {
+    box.hidden = true;
+  }
+
+  function show() {
+    if (shown || !shouldOffer()) {
+      return;
+    }
+    shown = true;
+    var reason = blockedReason();
+    if (reason && text) {
+      text.textContent = reason;
+    }
+    if (reason && yes) {
+      yes.hidden = true;
+    }
+    box.hidden = false;
+    if (yes && !yes.hidden) {
+      yes.focus();
+    } else if (later) {
+      later.focus();
+    }
+  }
+
+  function offerAfterInstall() {
+    if (install && !install.hidden) {
+      return;
+    }
+    show();
+  }
+
+  if (later) {
+    later.addEventListener("click", function () {
+      remember("later");
+      hide();
+    });
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !box.hidden) {
+      remember("later");
+      hide();
+    }
+  });
+
+  if (yes) {
+    yes.addEventListener("click", function () {
+      var reason = blockedReason();
+      if (reason) {
+        if (text) {
+          text.textContent = reason;
+        }
+        return;
+      }
+      Notification.requestPermission().then(function (result) {
+        if (result === "granted") {
+          remember("granted");
+          hide();
+          return;
+        }
+        if (result === "denied") {
+          remember("denied");
+          if (text) {
+            text.textContent = "הדפדפן חסם את ההתראות. אפשר לשנות זאת בהגדרות הדפדפן.";
+          }
+          yes.hidden = true;
+        }
+      });
+    });
+  }
+
+  if (!install || installFinished()) {
+    offerAfterInstall();
+    return;
+  }
+
+  var sawInstall = false;
+  var observer = new MutationObserver(function () {
+    if (!install.hidden) {
+      sawInstall = true;
+      return;
+    }
+    if (sawInstall) {
+      offerAfterInstall();
+    }
+  });
+  observer.observe(install, { attributes: true, attributeFilter: ["hidden"] });
+
+  var waits = 0;
+  var timer = window.setInterval(function () {
+    waits += 1;
+    if (!install.hidden) {
+      sawInstall = true;
+    }
+    if (installFinished() && install.hidden) {
+      window.clearInterval(timer);
+      offerAfterInstall();
+      return;
+    }
+    if (sawInstall && install.hidden) {
+      window.clearInterval(timer);
+      offerAfterInstall();
+      return;
+    }
+    if (waits > 30) {
+      window.clearInterval(timer);
+    }
+  }, 100);
 })();

@@ -1603,6 +1603,54 @@ body.date-screen .btn--gold::after {
   width: 100%;
 }
 
+.notify-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  display: grid;
+  place-items: center;
+  padding: 1.2rem;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.notify-prompt[hidden] {
+  display: none;
+}
+
+.notify-prompt__card {
+  width: min(100%, 24rem);
+  padding: 1.25rem 1.1rem 1.1rem;
+  border: 1px solid rgba(196, 164, 106, 0.62);
+  border-radius: 1rem;
+  background: #0c0c0c;
+  color: var(--ivory);
+  text-align: center;
+}
+
+.notify-prompt__card h2 {
+  margin: 0;
+  color: var(--gold-light);
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 500;
+}
+
+.notify-prompt__card p {
+  margin: 0.7rem 0 0;
+  color: var(--ivory-soft);
+  line-height: 1.5;
+}
+
+.notify-prompt__actions {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.notify-prompt .btn {
+  width: 100%;
+}
+
 .cal__continue:disabled {
   opacity: 0.38;
   cursor: default;
