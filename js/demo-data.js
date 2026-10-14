@@ -9,9 +9,8 @@ window.VIP_DEMO = {
   owner: {
     name: "זאבי הנאו",
     // WhatsApp number for wa.me: country code plus the mobile number, digits only.
-    // No plus, spaces, or leading 0. Example shape: 972501234567.
-    // Leave empty until Zeevi's real number is filled in. Do not invent one.
-    whatsappPhone: ""
+    // No plus, spaces, or leading 0.
+    whatsappPhone: "972512177021"
   },
   services: [
     {

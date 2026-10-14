@@ -212,6 +212,76 @@
 (function () {
   "use strict";
 
+  var storageKey = "vip-orders";
+
+  function readOrders() {
+    try {
+      var raw = localStorage.getItem(storageKey);
+      var list = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) {
+        return [];
+      }
+      return list.filter(function (item) {
+        return item && typeof item === "object" && typeof item.id === "string";
+      }).map(function (item) {
+        item.status = item.status === "approved" ? "approved" : "pending";
+        return item;
+      });
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function writeOrders(list) {
+    localStorage.setItem(storageKey, JSON.stringify(list));
+  }
+
+  function addOrder(order) {
+    var list = readOrders();
+    var saved = {
+      id: String(Date.now()) + "-" + Math.floor(Math.random() * 100000),
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      adults: order.adults || 0,
+      children: order.children || 0,
+      vip: order.vip || 0,
+      beards: order.beards || 0,
+      date: order.date || "",
+      time: order.time || "",
+      customer: order.customer || {},
+      photo: order.photo || ""
+    };
+    list.unshift(saved);
+    try {
+      writeOrders(list);
+    } catch (error) {
+      saved.photo = "";
+      list[0] = saved;
+      writeOrders(list);
+    }
+    return saved;
+  }
+
+  function approveOrder(id) {
+    var list = readOrders().map(function (item) {
+      if (item.id === id) {
+        item.status = "approved";
+      }
+      return item;
+    });
+    writeOrders(list);
+  }
+
+  window.VIP_ORDERS = {
+    read: readOrders,
+    add: addOrder,
+    approve: approveOrder
+  };
+})();
+
+(function () {
+  "use strict";
+
   var party = document.getElementById("party");
   var savedView = document.getElementById("booking-saved");
   if (!party && !savedView) {
@@ -1059,7 +1129,6 @@
   }
   if (dateLabel && draft.time) {
     line(when, dateLabel + ", בשעה " + draft.time);
-    line(when, "בחירת התאריך והשעה אינה אישור סופי לתור.");
   } else {
     line(when, "לא נבחרו תאריך ושעה.");
   }
@@ -1099,12 +1168,6 @@
   if (customer.notes) {
     line(address, "הערות: " + customer.notes);
   }
-  var paymentNames = { paybox: "PayBox", cash: "מזומן", transfer: "העברה בנקאית" };
-  var paymentSummary = document.getElementById("summary-payment");
-  if (paymentSummary) {
-    line(paymentSummary, paymentNames[customer.payment] ? "נבחר: " + paymentNames[customer.payment] : "לא נבחר אמצעי תשלום.");
-  }
-
   var storedPhoto = "";
   try {
     storedPhoto = sessionStorage.getItem(booking.sentPhotoKey) || "";
@@ -1180,127 +1243,148 @@
     return;
   }
 
-  var note = document.getElementById("send-note");
-  var demo = window.VIP_DEMO || {};
-  var owner = demo.owner || {};
-  var phone = String(owner.whatsappPhone || "").replace(/\D/g, "");
   var draft = booking.read();
-  var customer = draft.submitted && (draft.submitted.fullName || draft.submitted.phone || draft.submitted.payment) ? draft.submitted : draft.customer;
-  var services = demo.services || [];
-  var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
-  var paymentNames = { paybox: "PayBox", cash: "מזומן", transfer: "העברה בנקאית" };
-
-  function serviceName(id) {
-    var name = "";
-    services.forEach(function (service) {
-      if (service.id === id) {
-        name = service.name;
-      }
-    });
-    return name;
-  }
-
-  function priceOf(id) {
-    var amount = null;
-    services.forEach(function (service) {
-      if (service.id === id && !service.priceOnRequest && service.priceIls !== null && service.priceIls !== undefined) {
-        amount = service.priceIls;
-      }
-    });
-    return amount;
-  }
-
-  if (!phone) {
-    button.disabled = true;
-    if (note) {
-      note.textContent = "הכפתור עדיין לא יכול לפתוח את וואטסאפ. צריך למלא את המספר של זאבי בשדה whatsappPhone בקובץ js/demo-data.js, ספרות בלבד עם קידומת 972 ובלי אפס בהתחלה.";
-    }
-  }
-
-  function message() {
-    var lines = [];
-    lines.push("בקשת תור — VIP");
-    lines.push("זו בקשה בלבד. התור עדיין לא אושר, והשליחה מתבצעת רק בלחיצה על שליחה בוואטסאפ.");
-    lines.push("");
-    lines.push("שירותים:");
-    var chosen = serviceName(draft.serviceId);
-    if (chosen) {
-      lines.push(chosen);
-    }
-    if (draft.adults > 0) {
-      var adultPrice = priceOf("mens-haircut");
-      lines.push("מבוגרים: " + draft.adults + (adultPrice === null ? "" : " (" + (draft.adults * adultPrice) + " ₪)"));
-    }
-    if (draft.children > 0) {
-      var childPrice = priceOf("kids-haircut");
-      lines.push("ילדים: " + draft.children + (childPrice === null ? "" : " (" + (draft.children * childPrice) + " ₪)"));
-    }
-    if (draft.vip > 0) {
-      lines.push("חבילת VIP: " + draft.vip + " (מחיר בתיאום)");
-    }
-    if (draft.beards > 0) {
-      var beardPrice = priceOf("beard");
-      lines.push("סידור זקן: " + draft.beards + (beardPrice === null ? "" : " (" + (draft.beards * beardPrice) + " ₪)"));
-    }
-    if (!draft.adults && !draft.children && !draft.vip && !draft.beards) {
-      lines.push("לא נבחרה כמות.");
-    }
-    lines.push("");
-    var parts = String(draft.date || "").split("-");
-    if (parts.length === 3 && draft.time) {
-      var month = Number(parts[1]);
-      lines.push("תאריך: " + Number(parts[2]) + " ב" + (months[month - 1] || "") + " " + parts[0]);
-      lines.push("שעה: " + draft.time);
-    } else {
-      lines.push("תאריך ושעה: לא נבחרו.");
-    }
-    lines.push("");
-    lines.push("שם: " + (customer.fullName || "לא הוזן"));
-    lines.push("טלפון: " + (customer.phone || "לא הוזן"));
-    var streetLine = customer.street || "";
-    if (customer.houseNumber) {
-      streetLine = streetLine ? streetLine + " " + customer.houseNumber : customer.houseNumber;
-    }
-    var fullAddress = customer.city ? (streetLine ? streetLine + ", " + customer.city : customer.city) : streetLine;
-    lines.push("כתובת: " + (fullAddress || "לא הוזנה"));
-    if (customer.entrance) {
-      lines.push("כניסה: " + customer.entrance);
-    }
-    if (customer.floor) {
-      lines.push("קומה: " + customer.floor);
-    }
-    if (customer.apartment) {
-      lines.push("דירה: " + customer.apartment);
-    }
-    if (customer.entryCode) {
-      lines.push("קוד כניסה: " + customer.entryCode);
-    }
-    lines.push("הערות הגעה: " + (customer.notes || "אין"));
-    lines.push("תשלום לאחר התספורת: " + (paymentNames[customer.payment] || "לא נבחר"));
-    lines.push("אין תשלום באתר.");
-    return lines.join("\n");
-  }
-
-  function goToWaiting() {
-    if (sessionStorage.getItem("vip-whatsapp-prepared") === "1" && window.location.search.indexOf("stay=1") === -1) {
-      window.location.replace("booking-wait.html");
-    }
-  }
-
-  window.addEventListener("pageshow", goToWaiting);
+  var modal = document.getElementById("sent-modal");
+  var closeModal = document.getElementById("sent-close");
 
   button.addEventListener("click", function () {
-    if (!phone) {
-      return;
-    }
+    var photo = "";
     booking.write(draft);
     try {
-      sessionStorage.setItem("vip-whatsapp-prepared", "1");
+      photo = sessionStorage.getItem(booking.sentPhotoKey) || "";
     } catch (error) {
+      photo = "";
+    }
+    if (window.VIP_ORDERS) {
+      window.VIP_ORDERS.add({
+        adults: draft.adults,
+        children: draft.children,
+        vip: draft.vip,
+        beards: draft.beards,
+        date: draft.date,
+        time: draft.time,
+        customer: draft.submitted && (draft.submitted.fullName || draft.submitted.phone) ? draft.submitted : draft.customer,
+        photo: photo
+      });
+    }
+    if (modal && modal.showModal) {
+      modal.showModal();
+    }
+  });
+
+  if (closeModal) {
+    closeModal.addEventListener("click", function () {
+      window.location.href = "orders.html";
+    });
+  }
+})();
+
+(function () {
+  "use strict";
+
+  var list = document.getElementById("orders-list");
+  var requests = document.getElementById("request-list");
+  var orders = window.VIP_ORDERS;
+  if ((!list && !requests) || !orders) {
+    return;
+  }
+
+  var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+
+  function dateLabel(value) {
+    var parts = String(value || "").split("-");
+    if (parts.length !== 3) {
+      return "לא נבחר תאריך";
+    }
+    var month = Number(parts[1]);
+    return Number(parts[2]) + " ב" + (months[month - 1] || "") + " " + parts[0];
+  }
+
+  function addressOf(customer) {
+    var street = customer.street || "";
+    if (customer.houseNumber) {
+      street = street ? street + " " + customer.houseNumber : customer.houseNumber;
+    }
+    if (customer.city) {
+      return street ? street + ", " + customer.city : customer.city;
+    }
+    return street || "לא הוזנה כתובת";
+  }
+
+  function counts(order) {
+    var parts = [];
+    if (order.adults) {
+      parts.push("מבוגרים: " + order.adults);
+    }
+    if (order.children) {
+      parts.push("ילדים: " + order.children);
+    }
+    if (order.vip) {
+      parts.push("VIP: " + order.vip);
+    }
+    if (order.beards) {
+      parts.push("זקן: " + order.beards);
+    }
+    return parts.join(" · ") || "לא נבחרה כמות";
+  }
+
+  function paint(target, canApprove) {
+    var items = orders.read();
+    target.textContent = "";
+    if (!items.length) {
+      var empty = document.createElement("p");
+      empty.className = "orders-empty";
+      empty.textContent = "אין עדיין הזמנות.";
+      target.appendChild(empty);
       return;
     }
-    window.location.href = "https://wa.me/" + phone + "?text=" + encodeURIComponent(message());
-  });
+    items.forEach(function (order) {
+      var customer = order.customer || {};
+      var card = document.createElement("article");
+      var status = document.createElement("p");
+      var when = document.createElement("p");
+      var who = document.createElement("p");
+      var where = document.createElement("p");
+      var service = document.createElement("p");
+      card.className = "order-card";
+      status.className = "order-card__status" + (order.status === "approved" ? " is-approved" : "");
+      status.textContent = order.status === "approved" ? "מאושר" : "ממתין";
+      when.textContent = dateLabel(order.date) + (order.time ? ", בשעה " + order.time : "");
+      who.textContent = (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : "");
+      where.textContent = addressOf(customer);
+      service.textContent = counts(order);
+      card.appendChild(status);
+      card.appendChild(when);
+      card.appendChild(service);
+      card.appendChild(who);
+      card.appendChild(where);
+      if (order.photo) {
+        var image = document.createElement("img");
+        image.src = order.photo;
+        image.alt = "תמונת הכניסה לבניין";
+        card.appendChild(image);
+      }
+      if (canApprove && order.status !== "approved") {
+        var approve = document.createElement("button");
+        approve.type = "button";
+        approve.className = "btn btn--gold order-card__approve";
+        approve.textContent = "אישור התור";
+        approve.addEventListener("click", function () {
+          orders.approve(order.id);
+          paint(target, true);
+        });
+        card.appendChild(approve);
+      }
+      target.appendChild(card);
+    });
+  }
+
+  if (list) {
+    paint(list, false);
+  }
+  if (requests) {
+    paint(requests, true);
+  }
 })();
 
 (function () {
