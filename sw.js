@@ -1,4 +1,4 @@
-var CACHE_NAME = "vip-shell-v89";
+var CACHE_NAME = "vip-shell-v90";
 var SHELL = [
   "./index.html",
   "./booking.html",
