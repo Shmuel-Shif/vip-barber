@@ -1699,7 +1699,7 @@
     return;
   }
 
-  var emailInput = document.getElementById("account-email");
+  var usernameInput = document.getElementById("account-username");
   var passwordInput = document.getElementById("account-password");
   var status = document.getElementById("account-status");
   var loginButton = document.getElementById("account-login");
@@ -1713,17 +1713,17 @@
   }
 
   function credentials() {
-    var email = emailInput ? emailInput.value.trim() : "";
+    var username = usernameInput ? usernameInput.value.trim().toLowerCase() : "";
     var password = passwordInput ? passwordInput.value : "";
-    if (!email || email.indexOf("@") === -1) {
-      say("יש למלא אימייל.");
+    if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(username)) {
+      say("שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _.");
       return null;
     }
     if (!password || password.length < 6) {
       say("הסיסמה צריכה 6 תווים לפחות.");
       return null;
     }
-    return { email: email, password: password };
+    return { username: username, password: password };
   }
 
   function showSession(session) {
@@ -1737,14 +1737,15 @@
     if (logoutButton) {
       logoutButton.hidden = !signedIn;
     }
-    if (emailInput && emailInput.parentNode) {
-      emailInput.parentNode.hidden = signedIn;
+    if (usernameInput && usernameInput.parentNode) {
+      usernameInput.parentNode.hidden = signedIn;
     }
     if (passwordInput && passwordInput.parentNode) {
       passwordInput.parentNode.hidden = signedIn;
     }
     if (signedIn) {
-      say("מחוברים בתור " + (session.user.email || "") + ".");
+      var meta = session.user.user_metadata || {};
+      say("מחוברים בתור " + (meta.username || "") + ".");
       if (passwordInput) {
         passwordInput.value = "";
       }
@@ -1770,13 +1771,14 @@
       return;
     }
     say("בודקים את החשבון...");
-    auth[action](fields.email, fields.password).then(function (result) {
+    var method = action === "signUp" ? "signUpWithUsername" : "signInWithUsername";
+    auth[method](fields.username, fields.password).then(function (result) {
       if (!result || result.error) {
         say(result && result.error ? result.error : "הפעולה נכשלה.");
         return;
       }
       if (result.needsConfirm) {
-        say("נפתח חשבון. אם נדרש אישור, פתחו את האימייל ואז התחברו.");
+        say("החשבון נפתח, אבל השרת עדיין דורש אישור לפני התחברות.");
         if (passwordInput) {
           passwordInput.value = "";
         }

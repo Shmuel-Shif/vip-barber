@@ -98,6 +98,12 @@
     if (!raw) {
       return "הפעולה נכשלה.";
     }
+    if (text.indexOf("username taken") !== -1) {
+      return "שם המשתמש תפוס. אפשר להתחבר.";
+    }
+    if (text.indexOf("invalid username") !== -1) {
+      return "שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _.";
+    }
     if (text.indexOf("invalid login") !== -1 || text.indexOf("invalid credentials") !== -1) {
       return "האימייל או הסיסמה לא נכונים.";
     }
@@ -150,6 +156,39 @@
       return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
     }
     return raw;
+  }
+
+  function normalizeUsername(value) {
+    var name = String(value || "").trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(name)) {
+      return "";
+    }
+    return name;
+  }
+
+  function internalEmail(username) {
+    return username + "@login.vip-barber.invalid";
+  }
+
+  // Auth email is not always the same as profiles.username.
+  // zeevi770 is the admin profile, but that Auth user is still zeevi@...
+  // The zeevi770@... address belongs to a different, non-admin user.
+  function authEmailForUsername(username) {
+    if (username === "zeevi770") {
+      return internalEmail("zeevi");
+    }
+    return internalEmail(username);
+  }
+
+  function usernameAuthError(error) {
+    var text = messageFor(error);
+    if (text === "האימייל או הסיסמה לא נכונים.") {
+      return "שם המשתמש או הסיסמה לא נכונים.";
+    }
+    if (text === "כבר יש חשבון עם האימייל הזה. אפשר להתחבר.") {
+      return "שם המשתמש תפוס. אפשר להתחבר.";
+    }
+    return text;
   }
 
   function withClient(task) {
@@ -255,6 +294,45 @@
         }).then(function (result) {
           if (result.error) {
             return { session: null, error: messageFor(result.error) };
+          }
+          return { session: result.data && result.data.session ? result.data.session : null, error: "" };
+        });
+      });
+    },
+    signUpWithUsername: function (username, password) {
+      var name = normalizeUsername(username);
+      if (!name) {
+        return Promise.resolve({ session: null, needsConfirm: false, error: "שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _." });
+      }
+      return withClient(function (ready) {
+        return ready.auth.signUp({
+          email: internalEmail(name),
+          password: password,
+          options: {
+            data: { username: name },
+            emailRedirectTo: window.location.origin + window.location.pathname
+          }
+        }).then(function (result) {
+          if (result.error) {
+            return { session: null, needsConfirm: false, error: usernameAuthError(result.error) };
+          }
+          var session = result.data && result.data.session ? result.data.session : null;
+          return { session: session, needsConfirm: !session, error: "" };
+        });
+      });
+    },
+    signInWithUsername: function (username, password) {
+      var name = normalizeUsername(username);
+      if (!name) {
+        return Promise.resolve({ session: null, error: "שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _." });
+      }
+      return withClient(function (ready) {
+        return ready.auth.signInWithPassword({
+          email: authEmailForUsername(name),
+          password: password
+        }).then(function (result) {
+          if (result.error) {
+            return { session: null, error: usernameAuthError(result.error) };
           }
           return { session: result.data && result.data.session ? result.data.session : null, error: "" };
         });

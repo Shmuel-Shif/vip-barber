@@ -133,24 +133,24 @@
 
   if (loginForm) {
     loginForm.addEventListener("submit", function (event) {
-      var email = usernameInput ? usernameInput.value.trim() : "";
+      var username = usernameInput ? usernameInput.value.trim().toLowerCase() : "";
       var password = passwordInput ? passwordInput.value : "";
       var auth = window.VIP_SUPABASE;
       event.preventDefault();
-      if (!email || email.indexOf("@") === -1) {
-        showLoginError("יש למלא אימייל.");
+      if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(username)) {
+        showLoginError("שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _.");
         return;
       }
       if (!password) {
         showLoginError("יש למלא את הסיסמה.");
         return;
       }
-      if (!auth || !auth.signIn || !auth.profile) {
+      if (!auth || !auth.signInWithUsername || !auth.profile) {
         showLoginError("החיבור לשרת לא נטען בעמוד.");
         return;
       }
       showLoginError("בודקים את החשבון...");
-      auth.signIn(email, password).then(function (result) {
+      auth.signInWithUsername(username, password).then(function (result) {
         if (passwordInput) {
           passwordInput.value = "";
           passwordInput.setAttribute("type", "password");
@@ -161,7 +161,7 @@
           passwordToggle.setAttribute("aria-label", "הצגת הסיסמה");
         }
         if (!result || result.error || !result.session) {
-          showLoginError(result && result.error ? result.error : "האימייל או הסיסמה לא נכונים.");
+          showLoginError(result && result.error ? result.error : "שם המשתמש או הסיסמה לא נכונים.");
           return null;
         }
         return auth.profile();
