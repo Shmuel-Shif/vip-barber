@@ -2496,6 +2496,7 @@ body.admin .admin-warn {
 
 body.admin .admin-field,
 body.admin .avail__times label,
+body.admin .admin-hour__times label,
 body.admin .admin-break label {
   display: grid;
   gap: 0.3rem;
@@ -2505,6 +2506,7 @@ body.admin .admin-break label {
 
 body.admin .admin-field input,
 body.admin .avail__times input,
+body.admin .admin-hour__times input,
 body.admin .admin-break input {
   width: 100%;
   min-height: 2.75rem;
@@ -2593,5 +2595,171 @@ body.admin .admin-dialog .btn {
   body.admin .admin-slots,
   body.admin .avail__modes {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+body.admin .admin-panel[hidden] {
+  display: none !important;
+}
+
+body.admin .admin-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+body.admin .admin-hour {
+  padding: 0.75rem 0.8rem;
+  border: 1px solid rgba(196, 164, 106, 0.4);
+  border-radius: 0.9rem;
+  background: rgba(196, 164, 106, 0.05);
+}
+
+body.admin .admin-hour__bar,
+body.admin .admin-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+body.admin .admin-hour__name {
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ivory);
+  font: inherit;
+  font-size: 1.05rem;
+  text-align: right;
+  cursor: pointer;
+}
+
+body.admin .admin-switch {
+  min-height: 2.6rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 999px;
+  background: #141414;
+  color: var(--ivory);
+  font: inherit;
+  cursor: pointer;
+}
+
+body.admin .admin-switch[aria-pressed="true"] {
+  border-color: transparent;
+  background: linear-gradient(180deg, #f0e2c4 0%, #c4a46a 100%);
+  color: var(--ink);
+}
+
+body.admin .admin-hour__times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+
+body.admin .admin-hour__more {
+  margin-top: 0.8rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(196, 164, 106, 0.28);
+}
+
+body.admin .admin-day-nav button {
+  width: auto;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.8rem;
+  font-size: 0.92rem;
+}
+
+body.admin .admin-tools {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+body.admin .admin-tools label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--ivory-soft);
+}
+
+body.admin .admin-tools input,
+body.admin .admin-tools select {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 0.75rem;
+  background: #111;
+  color: var(--ivory);
+  padding-inline: 0.7rem;
+  font: inherit;
+}
+
+body.admin .admin-compact {
+  margin-top: 0.7rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(196, 164, 106, 0.4);
+  border-radius: 0.9rem;
+  background: rgba(196, 164, 106, 0.05);
+}
+
+body.admin .admin-compact.is-pending {
+  border-right: 4px solid var(--gold-light);
+}
+
+body.admin .admin-compact.is-approved {
+  border-right: 4px solid var(--gold);
+}
+
+body.admin .admin-compact.is-rejected {
+  border-right: 4px solid #a56a62;
+}
+
+body.admin .admin-compact.is-cancelled {
+  border-right: 4px solid #5c5c5c;
+}
+
+body.admin .admin-compact__toggle {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ivory);
+  font: inherit;
+  line-height: 1.45;
+  text-align: right;
+  cursor: pointer;
+}
+
+body.admin .admin-compact__body p,
+body.admin .admin-compact > p {
+  margin: 0.35rem 0 0;
+  line-height: 1.45;
+}
+
+body.admin .admin-compact img {
+  width: min(100%, 8rem);
+  margin-top: 0.6rem;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 0.7rem;
+}
+
+@media (min-width: 720px) {
+  body.admin .admin-nav {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  body.admin .admin-nav button {
+    flex: 1 1 8rem;
+  }
+
+  body.admin .admin-tools {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

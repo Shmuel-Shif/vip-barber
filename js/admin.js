@@ -14,18 +14,18 @@
 
   var settingsKey = "vip-business-settings";
   var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+  var weekNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
   var paymentNames = { paybox: "PayBox", cash: "מזומן", transfer: "העברה בנקאית" };
   var statusNames = { pending: "ממתין", approved: "מאושר", rejected: "נדחה", cancelled: "בוטל" };
   var today = new Date();
   var cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - cursor.getDay());
+  var dayCursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   var week = {};
   var exceptions = {};
-  var openExtras = {};
-  var requestFilter = "all";
+  var openDay = "";
+  var openOrder = "";
   var cancelId = "";
-  var exceptionDraft = blankDay();
-  exceptionDraft.status = "closed";
 
   function each(list, fn) {
     Array.prototype.forEach.call(list, fn);
@@ -159,7 +159,7 @@
   }
 
   function dayHoursValid(item) {
-    if (item.status !== "hours") {
+    if (!item || item.status !== "hours") {
       return true;
     }
     if (!item.start || !item.end || item.end <= item.start) {
@@ -173,7 +173,7 @@
   function markDirty() {
     var statusNode = document.getElementById("week-status");
     if (statusNode) {
-      statusNode.textContent = "יש שינויים בשבוע הזה שעדיין לא נשמרו.";
+      statusNode.textContent = "יש שינויים שעדיין לא נשמרו.";
     }
   }
 
@@ -192,38 +192,19 @@
       return found.priceIls;
     }
     var parts = [];
-    var total = 0;
-    var adultPrice = price("mens-haircut");
-    var childPrice = price("kids-haircut");
-    var beardPrice = price("beard");
     if (order.adults) {
+      var adultPrice = price("mens-haircut");
       parts.push(order.adults + " תספורת גברים" + (adultPrice === null ? "" : " (" + (order.adults * adultPrice) + " ₪)"));
-      if (adultPrice !== null) {
-        total += order.adults * adultPrice;
-      }
     }
     if (order.children) {
+      var childPrice = price("kids-haircut");
       parts.push(order.children + " תספורת ילדים" + (childPrice === null ? "" : " (" + (order.children * childPrice) + " ₪)"));
-      if (childPrice !== null) {
-        total += order.children * childPrice;
-      }
     }
     if (order.beards) {
+      var beardPrice = price("beard");
       parts.push(order.beards + " סידור זקן" + (beardPrice === null ? "" : " (" + (order.beards * beardPrice) + " ₪)"));
-      if (beardPrice !== null) {
-        total += order.beards * beardPrice;
-      }
     }
-    if (order.vip) {
-      parts.push(order.vip + " חבילת VIP, מחיר בתיאום");
-    }
-    if (!parts.length) {
-      return "לא צוינו שירותים";
-    }
-    if (total > 0) {
-      parts.push("סה״כ לפי קטלוג הלקוח: " + total + " ₪");
-    }
-    return parts.join(" · ");
+    return parts.join(" · ") || "לא צוינו שירותים";
   }
 
   function addressOf(customer) {
@@ -241,49 +222,30 @@
     return dateLabel(order.date) + (order.time ? ", בשעה " + order.time : "");
   }
 
-  function ordersOn(dateValue) {
-    return ordersApi.read().filter(function (order) {
-      return order.date === dateValue && order.status !== "rejected" && order.status !== "cancelled";
+  function timeInput(value, disabled, onChange) {
+    var input = document.createElement("input");
+    input.type = "time";
+    input.value = value || "";
+    input.disabled = !!disabled;
+    input.addEventListener("change", function () {
+      onChange(input.value);
     });
+    return input;
   }
 
-  function conflictText(order, source) {
-    if (!source || source.status === "unset") {
-      return "";
-    }
-    if (source.status === "closed") {
-      return "התור יושב על יום שמסומן סגור בניהול.";
-    }
-    if (order.time && source.start && source.end && (order.time < source.start || order.time >= source.end)) {
-      return "השעה מחוץ לטווח המוגדר כאן.";
-    }
-    if (order.time && source.blocked.indexOf(order.time) !== -1) {
-      return "השעה מסומנת כחסומה ועדיין יש תור.";
-    }
-    var inBreak = source.breaks.some(function (item) {
-      return order.time && order.time >= item.start && order.time < item.end;
-    });
-    return inBreak ? "השעה נופלת בתוך הפסקה." : "";
-  }
-
-  function fillExtras(extras, day) {
-    var item = week[day.id];
-    extras.textContent = "";
-    paragraph(extras, "הפסקות", "admin-kicker");
-    item.breaks.forEach(function (br, index) {
+  function breakEditor(list, disabled, onChange) {
+    var box = document.createElement("div");
+    paragraph(box, "הפסקות", "admin-kicker");
+    list.forEach(function (br, index) {
       var row = document.createElement("div");
       row.className = "admin-break";
       [["start", "התחלה"], ["end", "סיום"]].forEach(function (field) {
         var wrap = document.createElement("label");
         wrap.textContent = field[1];
-        var input = document.createElement("input");
-        input.type = "time";
-        input.value = br[field[0]];
-        input.addEventListener("change", function () {
-          item.breaks[index][field[0]] = input.value;
-          markDirty();
-        });
-        wrap.appendChild(input);
+        wrap.appendChild(timeInput(br[field[0]], disabled, function (value) {
+          list[index][field[0]] = value;
+          onChange();
+        }));
         row.appendChild(wrap);
       });
       var remove = document.createElement("button");
@@ -291,28 +253,33 @@
       remove.className = "btn btn--ghost";
       remove.textContent = "הסרת הפסקה";
       remove.addEventListener("click", function () {
-        item.breaks.splice(index, 1);
-        markDirty();
-        fillExtras(extras, day);
+        list.splice(index, 1);
+        onChange();
+        renderWeek();
       });
       row.appendChild(remove);
-      extras.appendChild(row);
+      box.appendChild(row);
     });
-    var addBreak = document.createElement("button");
-    addBreak.type = "button";
-    addBreak.className = "btn btn--ghost";
-    addBreak.textContent = "הוספת הפסקה";
-    addBreak.addEventListener("click", function () {
-      item.breaks.push({ start: item.start || "", end: "" });
-      markDirty();
-      fillExtras(extras, day);
+    var add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn btn--ghost";
+    add.textContent = "הוספת הפסקה";
+    add.addEventListener("click", function () {
+      list.push({ start: "", end: "" });
+      onChange();
+      renderWeek();
     });
-    extras.appendChild(addBreak);
-    paragraph(extras, "שעות חסומות", "admin-kicker");
+    box.appendChild(add);
+    return box;
+  }
+
+  function blockEditor(item, onChange) {
+    var box = document.createElement("div");
+    paragraph(box, "שעות חסומות", "admin-kicker");
     var slots = item.status === "hours" ? slotsBetween(item.start, item.end) : [];
     if (!slots.length) {
-      paragraph(extras, "אחרי שמגדירים שעת התחלה וסיום אפשר לחסום שעות של חצי שעה.");
-      return;
+      paragraph(box, "אחרי שעת התחלה וסיום אפשר לחסום שעות של חצי שעה.");
+      return box;
     }
     var grid = document.createElement("div");
     grid.className = "admin-slots";
@@ -323,7 +290,6 @@
       button.className = "admin-slot";
       button.textContent = slot;
       button.setAttribute("aria-pressed", blocked ? "true" : "false");
-      button.setAttribute("aria-label", (blocked ? "שעה חסומה " : "חסימת השעה ") + slot);
       button.addEventListener("click", function () {
         var place = item.blocked.indexOf(slot);
         if (place === -1) {
@@ -331,110 +297,135 @@
         } else {
           item.blocked.splice(place, 1);
         }
-        markDirty();
-        fillExtras(extras, day);
+        onChange();
+        renderWeek();
       });
       grid.appendChild(button);
     });
-    extras.appendChild(grid);
+    box.appendChild(grid);
+    return box;
   }
 
   function renderWeek() {
     var label = document.getElementById("week-label");
-    var end = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 5);
-    if (!label) {
-      return;
+    var end = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6);
+    if (label) {
+      label.textContent = cursor.getDate() + " ב" + months[cursor.getMonth()] + " – " + end.getDate() + " ב" + months[end.getMonth()];
     }
-    label.textContent = cursor.getDate() + " ב" + months[cursor.getMonth()] + " – " + end.getDate() + " ב" + months[end.getMonth()] + " " + end.getFullYear();
     root.textContent = "";
     schedule.weekdays.forEach(function (day) {
-      if (day.id === "6") {
-        return;
-      }
       var date = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + Number(day.id));
       var dateValue = iso(date);
       var item = week[day.id];
+      var open = item.status === "hours";
       var card = document.createElement("article");
-      var savedException = exceptions[dateValue] ? normalizeDay(exceptions[dateValue]) : null;
-      card.className = "avail__day" + (dateValue === iso(today) ? " is-today" : "");
+      card.className = "admin-hour";
 
-      var title = document.createElement("h2");
-      title.textContent = "יום " + day.label + ", " + date.getDate() + " ב" + months[date.getMonth()];
-      card.appendChild(title);
-      if (savedException) {
-        var exceptionLabel = savedException.status === "closed" ? "סגור" : ((savedException.start && savedException.end) ? savedException.start + "–" + savedException.end : "שעות חריגות");
-        paragraph(card, "לתאריך זה שמורות שעות חריגות: " + exceptionLabel, "admin-flag");
-      }
-
-      var modes = document.createElement("div");
-      modes.className = "avail__modes";
-      [["unset", "טרם הוגדר"], ["closed", "סגור"], ["hours", "פתוח"]].forEach(function (mode) {
-        var button = document.createElement("button");
-        button.type = "button";
-        button.textContent = mode[1];
-        button.setAttribute("aria-pressed", item.status === mode[0] ? "true" : "false");
-        button.addEventListener("click", function () {
-          item.status = mode[0];
-          markDirty();
-          renderWeek();
-        });
-        modes.appendChild(button);
+      var bar = document.createElement("div");
+      bar.className = "admin-hour__bar";
+      var name = document.createElement("button");
+      name.type = "button";
+      name.className = "admin-hour__name";
+      name.textContent = "יום " + day.label;
+      name.setAttribute("aria-expanded", openDay === day.id ? "true" : "false");
+      name.addEventListener("click", function () {
+        openDay = openDay === day.id ? "" : day.id;
+        renderWeek();
       });
-      card.appendChild(modes);
+      var toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "admin-switch";
+      toggle.textContent = open ? "פתוח" : "סגור";
+      toggle.setAttribute("aria-pressed", open ? "true" : "false");
+      toggle.setAttribute("aria-label", "יום " + day.label + (open ? " פתוח" : " סגור"));
+      toggle.addEventListener("click", function () {
+        item.status = open ? "closed" : "hours";
+        markDirty();
+        renderWeek();
+      });
+      bar.appendChild(name);
+      bar.appendChild(toggle);
+      card.appendChild(bar);
 
-      var fields = document.createElement("div");
-      fields.className = "avail__times";
-      [["start", "שעת התחלה"], ["end", "שעת סיום"]].forEach(function (field) {
+      var times = document.createElement("div");
+      times.className = "admin-hour__times";
+      [["start", "התחלה"], ["end", "סיום"]].forEach(function (field) {
         var wrap = document.createElement("label");
         wrap.textContent = field[1];
-        var input = document.createElement("input");
-        input.type = "time";
-        input.value = item[field[0]];
-        input.disabled = item.status !== "hours";
-        input.addEventListener("change", function () {
-          item[field[0]] = input.value;
+        wrap.appendChild(timeInput(item[field[0]], !open, function (value) {
+          item[field[0]] = value;
           markDirty();
-          var extras = card.querySelector(".admin-extras");
-          if (extras) {
-            fillExtras(extras, day);
-          }
-        });
-        wrap.appendChild(input);
-        fields.appendChild(wrap);
+        }));
+        times.appendChild(wrap);
       });
-      card.appendChild(fields);
+      card.appendChild(times);
 
-      var details = document.createElement("details");
-      details.className = "admin-details";
-      if (openExtras[day.id]) {
-        details.open = true;
-      }
-      details.addEventListener("toggle", function () {
-        openExtras[day.id] = details.open;
-      });
-      var summary = document.createElement("summary");
-      summary.textContent = "הפסקות ושעות חסומות";
-      var extras = document.createElement("div");
-      extras.className = "admin-extras";
-      details.appendChild(summary);
-      details.appendChild(extras);
-      fillExtras(extras, day);
-      card.appendChild(details);
-
-      var visits = ordersOn(dateValue);
-      var source = savedException || item;
-      paragraph(card, "תורים במכשיר זה", "admin-kicker");
-      if (!visits.length) {
-        paragraph(card, "אין תור שמור ליום הזה.");
-      } else {
-        visits.forEach(function (order) {
-          var customer = order.customer || {};
-          var warning = conflictText(order, source);
-          paragraph(card, (customer.fullName || "ללא שם") + (order.time ? " · " + order.time : "") + " · " + (statusNames[order.status] || "ממתין"));
-          if (warning) {
-            paragraph(card, warning, "admin-warn");
-          }
-        });
+      if (openDay === day.id) {
+        var more = document.createElement("div");
+        more.className = "admin-hour__more";
+        more.appendChild(breakEditor(item.breaks, !open, markDirty));
+        more.appendChild(blockEditor(item, markDirty));
+        var exception = exceptions[dateValue] ? normalizeDay(exceptions[dateValue]) : null;
+        paragraph(more, "שעות חריגות ל־" + date.getDate() + " ב" + months[date.getMonth()], "admin-kicker");
+        if (!exception) {
+          var addException = document.createElement("button");
+          addException.type = "button";
+          addException.className = "btn btn--ghost";
+          addException.textContent = "הוספת שעות חריגות ליום הזה";
+          addException.addEventListener("click", function () {
+            exceptions[dateValue] = blankDay();
+            exceptions[dateValue].status = "closed";
+            markDirty();
+            renderWeek();
+          });
+          more.appendChild(addException);
+        } else {
+          var modeRow = document.createElement("div");
+          modeRow.className = "admin-inline";
+          [["closed", "סגור ביום הזה"], ["hours", "שעות אחרות"]].forEach(function (mode) {
+            var button = document.createElement("button");
+            button.type = "button";
+            button.className = "admin-switch";
+            button.textContent = mode[1];
+            button.setAttribute("aria-pressed", exception.status === mode[0] ? "true" : "false");
+            button.addEventListener("click", function () {
+              exception.status = mode[0];
+              exceptions[dateValue] = exception;
+              markDirty();
+              renderWeek();
+            });
+            modeRow.appendChild(button);
+          });
+          more.appendChild(modeRow);
+          var exceptionTimes = document.createElement("div");
+          exceptionTimes.className = "admin-hour__times";
+          [["start", "התחלה"], ["end", "סיום"]].forEach(function (field) {
+            var wrap = document.createElement("label");
+            wrap.textContent = field[1];
+            wrap.appendChild(timeInput(exception[field[0]], exception.status !== "hours", function (value) {
+              exception[field[0]] = value;
+              exceptions[dateValue] = exception;
+              markDirty();
+            }));
+            exceptionTimes.appendChild(wrap);
+          });
+          more.appendChild(exceptionTimes);
+          more.appendChild(breakEditor(exception.breaks, exception.status !== "hours", function () {
+            exceptions[dateValue] = exception;
+            markDirty();
+          }));
+          var clearException = document.createElement("button");
+          clearException.type = "button";
+          clearException.className = "btn btn--ghost";
+          clearException.textContent = "מחיקת השעות החריגות";
+          clearException.addEventListener("click", function () {
+            delete exceptions[dateValue];
+            markDirty();
+            renderWeek();
+          });
+          more.appendChild(clearException);
+        }
+        card.appendChild(more);
       }
       root.appendChild(card);
     });
@@ -445,7 +436,7 @@
     schedule.weekdays.forEach(function (day) {
       var item = week[day.id];
       days[day.id] = {
-        status: item.status,
+        status: item.status === "hours" ? "hours" : "closed",
         start: item.start,
         end: item.end,
         blocked: item.status === "hours" ? item.blocked.filter(function (slot) {
@@ -466,6 +457,10 @@
       if (!dayHoursValid(week[day.id])) {
         invalid = true;
       }
+      var dateValue = iso(new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + Number(day.id)));
+      if (exceptions[dateValue] && !dayHoursValid(normalizeDay(exceptions[dateValue]))) {
+        invalid = true;
+      }
     });
     if (invalid) {
       statusNode.textContent = "ביום פתוח צריך שעת התחלה, שעת סיום מאוחרת ממנה, והפסקות בתוך הטווח.";
@@ -473,196 +468,18 @@
     }
     var stored = readAvailability();
     stored.weeks[iso(cursor)] = cleanWeek();
-    exceptions = stored.exceptions;
     try {
       writeAvailability(stored.weeks);
     } catch (error) {
       statusNode.textContent = "לא ניתן לשמור במכשיר זה.";
       return;
     }
-    statusNode.textContent = "השבוע נשמר במכשיר זה בלבד. יומן הלקוחות לא עודכן.";
-    renderWeek();
+    statusNode.textContent = "השעות נשמרו במכשיר זה בלבד. יומן הלקוחות לא עודכן.";
   }
 
-  function paintException() {
-    var closed = document.querySelector("[data-exception-status='closed']");
-    var hours = document.querySelector("[data-exception-status='hours']");
-    var start = document.getElementById("exception-start");
-    var end = document.getElementById("exception-end");
-    var breaks = document.getElementById("exception-breaks");
-    var blocks = document.getElementById("exception-blocks");
-    if (closed) {
-      closed.setAttribute("aria-pressed", exceptionDraft.status === "closed" ? "true" : "false");
-    }
-    if (hours) {
-      hours.setAttribute("aria-pressed", exceptionDraft.status === "hours" ? "true" : "false");
-    }
-    if (start) {
-      start.value = exceptionDraft.start;
-      start.disabled = exceptionDraft.status !== "hours";
-    }
-    if (end) {
-      end.value = exceptionDraft.end;
-      end.disabled = exceptionDraft.status !== "hours";
-    }
-    if (!breaks || !blocks) {
-      return;
-    }
-    breaks.textContent = "";
-    exceptionDraft.breaks.forEach(function (br, index) {
-      var row = document.createElement("div");
-      row.className = "admin-break";
-      [["start", "התחלה"], ["end", "סיום"]].forEach(function (field) {
-        var wrap = document.createElement("label");
-        wrap.textContent = field[1];
-        var input = document.createElement("input");
-        input.type = "time";
-        input.value = br[field[0]];
-        input.disabled = exceptionDraft.status !== "hours";
-        input.addEventListener("change", function () {
-          exceptionDraft.breaks[index][field[0]] = input.value;
-        });
-        wrap.appendChild(input);
-        row.appendChild(wrap);
-      });
-      var remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "btn btn--ghost";
-      remove.textContent = "הסרת הפסקה";
-      remove.addEventListener("click", function () {
-        exceptionDraft.breaks.splice(index, 1);
-        paintException();
-      });
-      row.appendChild(remove);
-      breaks.appendChild(row);
-    });
-    blocks.textContent = "";
-    var slots = exceptionDraft.status === "hours" ? slotsBetween(exceptionDraft.start, exceptionDraft.end) : [];
-    if (!slots.length) {
-      paragraph(blocks, "בחרו שעות חריגות כדי לחסום שעות בתאריך הזה.");
-      return;
-    }
-    var grid = document.createElement("div");
-    grid.className = "admin-slots";
-    slots.forEach(function (slot) {
-      var button = document.createElement("button");
-      var blocked = exceptionDraft.blocked.indexOf(slot) !== -1;
-      button.type = "button";
-      button.className = "admin-slot";
-      button.textContent = slot;
-      button.setAttribute("aria-pressed", blocked ? "true" : "false");
-      button.addEventListener("click", function () {
-        var place = exceptionDraft.blocked.indexOf(slot);
-        if (place === -1) {
-          exceptionDraft.blocked.push(slot);
-        } else {
-          exceptionDraft.blocked.splice(place, 1);
-        }
-        paintException();
-      });
-      grid.appendChild(button);
-    });
-    blocks.appendChild(grid);
-  }
-
-  function loadException(dateValue) {
-    exceptionDraft = normalizeDay(exceptions[dateValue]);
-    if (!exceptions[dateValue]) {
-      exceptionDraft.status = "closed";
-      exceptionDraft.start = "";
-      exceptionDraft.end = "";
-    }
-    paintException();
-  }
-
-  function stamp(order) {
-    if (!order.date) {
-      return null;
-    }
-    var dateParts = String(order.date).split("-");
-    var timeParts = String(order.time || "00:00").split(":");
-    if (dateParts.length !== 3) {
-      return null;
-    }
-    var point = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]), Number(timeParts[0]) || 0, Number(timeParts[1]) || 0);
-    return isNaN(point.getTime()) ? null : point;
-  }
-
-  function paintDashboard() {
-    var list = ordersApi.read();
-    var now = new Date();
-    var todayValue = iso(now);
-    var pending = list.filter(function (order) {
-      return order.status === "pending";
-    });
-    var fresh = pending.filter(function (order) {
-      if (!order.createdAt) {
-        return false;
-      }
-      var createdDate = new Date(order.createdAt);
-      return !isNaN(createdDate.getTime()) && iso(createdDate) === todayValue;
-    });
-    var todayApproved = list.filter(function (order) {
-      return order.status === "approved" && order.date === todayValue;
-    });
-    var upcoming = list.filter(function (order) {
-      var point = stamp(order);
-      return order.status === "approved" && point && point.getTime() >= now.getTime();
-    }).sort(function (a, b) {
-      return stamp(a).getTime() - stamp(b).getTime();
-    });
-    document.getElementById("stat-new").textContent = String(fresh.length);
-    document.getElementById("stat-pending").textContent = String(pending.length);
-    document.getElementById("stat-today").textContent = String(todayApproved.length);
-    var nextNode = document.getElementById("next-slot");
-    if (nextNode) {
-      nextNode.textContent = "";
-      if (!upcoming.length) {
-        paragraph(nextNode, "אין תור מאושר קרוב במכשיר זה.");
-      } else {
-        var next = upcoming[0];
-        var customer = next.customer || {};
-        paragraph(nextNode, whenText(next));
-        paragraph(nextNode, (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : ""));
-        paragraph(nextNode, serviceText(next));
-      }
-    }
-    paintNotices();
-  }
-
-  function paintNotices() {
-    var target = document.getElementById("admin-notice-list");
-    if (!target || !window.VIP_NOTICES) {
-      return;
-    }
-    var items = window.VIP_NOTICES.read().filter(function (item) {
-      return item.type === "customer-cancel" && !item.seen;
-    });
-    target.textContent = "";
-    if (!items.length) {
-      paragraph(target, "אין התראות ביטול חדשות. שליחה אמיתית לזאבי תחובר אחר כך.");
-      return;
-    }
-    items.forEach(function (item) {
-      var card = document.createElement("article");
-      var button = document.createElement("button");
-      card.className = "admin-request is-cancelled";
-      paragraph(card, item.text);
-      paragraph(card, "ההתראה שמורה במכשיר זה. היא עדיין לא נשלחת לזאבי.");
-      button.type = "button";
-      button.className = "btn btn--ghost";
-      button.textContent = "הבנתי";
-      button.addEventListener("click", function () {
-        window.VIP_NOTICES.markSeen(item.id);
-        paintNotices();
-      });
-      card.appendChild(button);
-      target.appendChild(card);
-    });
-  }
-
-  function arrivalLines(customer) {
-    var lines = [];
+  function detailLines(order) {
+    var customer = order.customer || {};
+    var lines = [serviceText(order)];
     var address = addressOf(customer);
     if (address) {
       lines.push("כתובת: " + address);
@@ -685,83 +502,78 @@
     if (customer.payment && paymentNames[customer.payment]) {
       lines.push("תשלום אחרי התספורת: " + paymentNames[customer.payment]);
     }
+    if (order.cancelledBy === "customer") {
+      lines.push("בוטל על ידי הלקוח. ההתראה שמורה במכשיר זה ועדיין לא נשלחת.");
+    }
     return lines;
   }
 
-  function feedback(text) {
-    var requestNode = document.getElementById("request-feedback");
-    var approvedNode = document.getElementById("approved-feedback");
-    if (requestNode) {
-      requestNode.textContent = text;
-    }
-    if (approvedNode) {
-      approvedNode.textContent = text;
-    }
-  }
-
-  function renderRequestCard(order) {
+  function compactCard(order, actions) {
     var customer = order.customer || {};
-    var lines = arrivalLines(customer);
     var card = document.createElement("article");
-    var badge = document.createElement("p");
-    var who = document.createElement("p");
-    card.className = "order-card admin-request is-" + (statusNames[order.status] ? order.status : "pending");
-    badge.className = "order-card__status is-" + (statusNames[order.status] ? order.status : "pending");
-    badge.textContent = statusNames[order.status] || "ממתין";
-    card.appendChild(badge);
-    if (order.cancelledBy === "customer") {
-      paragraph(card, "בוטל על ידי הלקוח. ההתראה שמורה במכשיר זה ועדיין לא נשלחת.");
-    }
-    paragraph(card, whenText(order), "admin-when");
-    paragraph(card, serviceText(order));
-    who.appendChild(document.createTextNode((customer.fullName || "ללא שם") + " · "));
-    if (customer.phone) {
-      var link = document.createElement("a");
-      link.href = "tel:" + String(customer.phone).replace(/[^\d+]/g, "");
-      link.textContent = customer.phone;
-      who.appendChild(link);
-    } else {
-      who.appendChild(document.createTextNode("אין טלפון"));
-    }
-    card.appendChild(who);
-    if (lines.length) {
-      lines.forEach(function (line) {
-        paragraph(card, line);
-      });
-    } else {
-      paragraph(card, "אין הערות או פרטי הגעה.");
-    }
-    if (order.photo) {
+    var toggle = document.createElement("button");
+    var body = document.createElement("div");
+    var expanded = openOrder === order.id;
+    card.className = "admin-compact is-" + (statusNames[order.status] ? order.status : "pending");
+    toggle.type = "button";
+    toggle.className = "admin-compact__toggle";
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    toggle.textContent = (order.time || "בלי שעה") + " · " + (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : "") + " · " + (statusNames[order.status] || "ממתין");
+    toggle.addEventListener("click", function () {
+      openOrder = expanded ? "" : order.id;
+      paintOrders();
+      paintDay();
+      paintPending();
+    });
+    body.className = "admin-compact__body";
+    body.hidden = !expanded;
+    detailLines(order).forEach(function (line) {
+      paragraph(body, line);
+    });
+    if (order.photo && expanded) {
       var image = document.createElement("img");
       image.src = order.photo;
       image.alt = "תמונת הכניסה לבניין";
-      card.appendChild(image);
+      body.appendChild(image);
     }
-    var actions = document.createElement("div");
-    actions.className = "admin-actions";
-    if (order.status === "pending") {
+    card.appendChild(toggle);
+    if (actions && expanded) {
+      body.appendChild(actions);
+    }
+    card.appendChild(body);
+    if (actions && !expanded) {
+      card.appendChild(actions);
+    }
+    return card;
+  }
+
+  function actionRow(order, mode) {
+    var row = document.createElement("div");
+    row.className = "admin-actions";
+    if (mode === "pending" && order.status === "pending") {
       var approve = document.createElement("button");
       var reject = document.createElement("button");
       approve.type = "button";
       approve.className = "btn btn--gold";
-      approve.textContent = "אישור התור";
+      approve.textContent = "אישור";
       approve.addEventListener("click", function () {
         ordersApi.approve(order.id);
-        feedback("התור סומן כמאושר במכשיר זה בלבד. לא נשלחה התראה.");
+        setFeedback("התור סומן כמאושר במכשיר זה בלבד. לא נשלחה התראה.");
         refreshLists();
       });
       reject.type = "button";
       reject.className = "btn btn--ghost";
-      reject.textContent = "דחיית הבקשה";
+      reject.textContent = "דחייה";
       reject.addEventListener("click", function () {
         ordersApi.reject(order.id);
-        feedback("הבקשה סומנה כנדחתה במכשיר זה בלבד. לא נשלחה התראה.");
+        setFeedback("הבקשה סומנה כנדחתה במכשיר זה בלבד. לא נשלחה התראה.");
         refreshLists();
       });
-      actions.appendChild(approve);
-      actions.appendChild(reject);
-      card.appendChild(actions);
-    } else if (order.status === "approved") {
+      row.appendChild(approve);
+      row.appendChild(reject);
+      return row;
+    }
+    if (order.status === "approved") {
       var cancel = document.createElement("button");
       cancel.type = "button";
       cancel.className = "btn btn--ghost";
@@ -769,54 +581,147 @@
       cancel.addEventListener("click", function () {
         askCancel(order);
       });
-      actions.appendChild(cancel);
-      card.appendChild(actions);
+      row.appendChild(cancel);
+      return row;
     }
-    return card;
+    return null;
   }
 
-  function paintRequests() {
-    var target = document.getElementById("admin-request-list");
+  function paintDay() {
+    var label = document.getElementById("day-label");
+    var list = document.getElementById("day-list");
+    if (!label || !list) {
+      return;
+    }
+    label.textContent = weekNames[dayCursor.getDay()] + ", " + dayCursor.getDate() + " ב" + months[dayCursor.getMonth()];
     var items = ordersApi.read().filter(function (order) {
-      return requestFilter === "all" || order.status === requestFilter;
+      return order.date === iso(dayCursor) && order.status !== "rejected" && order.status !== "cancelled";
     }).sort(function (a, b) {
-      var rank = { pending: 0, approved: 1, rejected: 2, cancelled: 3 };
-      return (rank[a.status] || 9) - (rank[b.status] || 9);
+      return String(a.time || "").localeCompare(String(b.time || ""));
     });
-    target.textContent = "";
+    list.textContent = "";
     if (!items.length) {
-      paragraph(target, "אין בקשות במכשיר זה לסינון שנבחר. בקשה מופיעה כאן רק אחרי שליחה מאותו מכשיר.", "orders-empty");
+      paragraph(list, "אין תורים ביום הזה במכשיר זה.", "orders-empty");
       return;
     }
     items.forEach(function (order) {
-      target.appendChild(renderRequestCard(order));
+      list.appendChild(compactCard(order, actionRow(order, "day")));
     });
   }
 
-  function paintApproved() {
-    var target = document.getElementById("admin-approved-list");
-    var items = ordersApi.read().filter(function (order) {
-      return order.status === "approved";
-    }).sort(function (a, b) {
-      var aTime = stamp(a) ? stamp(a).getTime() : 0;
-      var bTime = stamp(b) ? stamp(b).getTime() : 0;
-      return aTime - bTime;
+  function filteredOrders() {
+    var status = document.getElementById("orders-status");
+    var date = document.getElementById("orders-date");
+    var search = document.getElementById("orders-search");
+    var statusValue = status ? status.value : "all";
+    var dateValue = date ? date.value : "";
+    var query = search ? search.value.trim() : "";
+    return ordersApi.read().filter(function (order) {
+      var customer = order.customer || {};
+      if (statusValue !== "all" && order.status !== statusValue) {
+        return false;
+      }
+      if (dateValue && order.date !== dateValue) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      var haystack = (customer.fullName || "") + " " + (customer.phone || "");
+      return haystack.indexOf(query) !== -1;
     });
-    target.textContent = "";
+  }
+
+  function paintOrders() {
+    var list = document.getElementById("orders-admin-list");
+    if (!list) {
+      return;
+    }
+    var items = filteredOrders();
+    list.textContent = "";
     if (!items.length) {
-      paragraph(target, "אין תורים מאושרים במכשיר זה.", "orders-empty");
+      paragraph(list, "אין הזמנות במכשיר זה לפי הסינון שנבחר.", "orders-empty");
       return;
     }
     items.forEach(function (order) {
-      target.appendChild(renderRequestCard(order));
+      list.appendChild(compactCard(order, actionRow(order, "orders")));
     });
+  }
+
+  function paintPending() {
+    var list = document.getElementById("pending-list");
+    if (!list) {
+      return;
+    }
+    var items = ordersApi.read().filter(function (order) {
+      return order.status === "pending";
+    });
+    list.textContent = "";
+    if (!items.length) {
+      paragraph(list, "אין בקשות ממתינות במכשיר זה.", "orders-empty");
+      return;
+    }
+    items.forEach(function (order) {
+      var customer = order.customer || {};
+      var card = document.createElement("article");
+      card.className = "admin-compact is-pending";
+      paragraph(card, whenText(order), "admin-when");
+      paragraph(card, (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : ""));
+      paragraph(card, serviceText(order));
+      var actions = actionRow(order, "pending");
+      if (actions) {
+        card.appendChild(actions);
+      }
+      list.appendChild(card);
+    });
+  }
+
+  function paintNotices() {
+    var target = document.getElementById("admin-notice-list");
+    if (!target || !window.VIP_NOTICES) {
+      return;
+    }
+    var items = window.VIP_NOTICES.read().filter(function (item) {
+      return item.type === "customer-cancel" && !item.seen;
+    });
+    target.textContent = "";
+    if (!items.length) {
+      return;
+    }
+    items.forEach(function (item) {
+      var card = document.createElement("article");
+      var button = document.createElement("button");
+      card.className = "admin-compact is-cancelled";
+      paragraph(card, item.text);
+      paragraph(card, "ההתראה שמורה במכשיר זה. היא עדיין לא נשלחת לזאבי.");
+      button.type = "button";
+      button.className = "btn btn--ghost";
+      button.textContent = "הבנתי";
+      button.addEventListener("click", function () {
+        window.VIP_NOTICES.markSeen(item.id);
+        paintNotices();
+      });
+      card.appendChild(button);
+      target.appendChild(card);
+    });
+  }
+
+  function setFeedback(text) {
+    var pending = document.getElementById("pending-feedback");
+    var orders = document.getElementById("orders-feedback");
+    if (pending) {
+      pending.textContent = text;
+    }
+    if (orders) {
+      orders.textContent = text;
+    }
   }
 
   function refreshLists() {
-    paintDashboard();
-    paintRequests();
-    paintApproved();
-    renderWeek();
+    paintDay();
+    paintOrders();
+    paintPending();
+    paintNotices();
   }
 
   function askCancel(order) {
@@ -831,6 +736,14 @@
   }
 
   function showPanel(name) {
+    var aliases = { dashboard: "day", requests: "pending", calendar: "hours", approved: "orders" };
+    var panels = { hours: true, day: true, orders: true, pending: true, settings: true };
+    if (aliases[name]) {
+      name = aliases[name];
+    }
+    if (!panels[name]) {
+      name = "day";
+    }
     each(document.querySelectorAll("[data-admin-section]"), function (panel) {
       panel.hidden = panel.getAttribute("data-admin-section") !== name;
     });
@@ -841,7 +754,10 @@
         button.removeAttribute("aria-current");
       }
     });
-    if (name === "dashboard" || name === "requests" || name === "approved" || name === "calendar") {
+    if (name === "hours") {
+      renderWeek();
+    }
+    if (name === "day" || name === "orders" || name === "pending") {
       refreshLists();
     }
     try {
@@ -918,103 +834,43 @@
 
   document.getElementById("week-prev").addEventListener("click", function () {
     cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 7);
+    openDay = "";
     loadWeek();
     document.getElementById("week-status").textContent = "";
     renderWeek();
   });
   document.getElementById("week-next").addEventListener("click", function () {
     cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 7);
+    openDay = "";
     loadWeek();
     document.getElementById("week-status").textContent = "";
     renderWeek();
   });
   document.getElementById("week-save").addEventListener("click", saveWeek);
-
-  document.getElementById("exception-date").addEventListener("change", function (event) {
-    var message = document.getElementById("exception-status");
-    loadException(event.target.value);
-    message.textContent = event.target.value && exceptions[event.target.value] ? "נמצאו שעות חריגות שמורות לתאריך הזה." : "אין עדיין שעות חריגות לתאריך הזה.";
+  document.getElementById("day-prev").addEventListener("click", function () {
+    dayCursor = new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate() - 1);
+    openOrder = "";
+    paintDay();
   });
-  each(document.querySelectorAll("[data-exception-status]"), function (button) {
-    button.addEventListener("click", function () {
-      exceptionDraft.status = button.getAttribute("data-exception-status");
-      paintException();
-    });
+  document.getElementById("day-next").addEventListener("click", function () {
+    dayCursor = new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate() + 1);
+    openOrder = "";
+    paintDay();
   });
-  document.getElementById("exception-start").addEventListener("change", function (event) {
-    exceptionDraft.start = event.target.value;
-    paintException();
-  });
-  document.getElementById("exception-end").addEventListener("change", function (event) {
-    exceptionDraft.end = event.target.value;
-    paintException();
-  });
-  document.getElementById("exception-add-break").addEventListener("click", function () {
-    exceptionDraft.breaks.push({ start: exceptionDraft.start || "", end: "" });
-    paintException();
-  });
-  document.getElementById("exception-save").addEventListener("click", function () {
-    var message = document.getElementById("exception-status");
-    var dateValue = document.getElementById("exception-date").value;
-    var stored;
-    if (!dateValue) {
-      message.textContent = "בחרו תאריך לפני השמירה.";
+  ["orders-status", "orders-date", "orders-search"].forEach(function (id) {
+    var field = document.getElementById(id);
+    if (!field) {
       return;
     }
-    if (!dayHoursValid(exceptionDraft)) {
-      message.textContent = "בשעות חריגות צריך התחלה, סיום מאוחר ממנה, והפסקות בתוך הטווח.";
-      return;
-    }
-    stored = readAvailability();
-    exceptions = stored.exceptions;
-    exceptions[dateValue] = {
-      status: exceptionDraft.status,
-      start: exceptionDraft.start,
-      end: exceptionDraft.end,
-      blocked: exceptionDraft.status === "hours" ? exceptionDraft.blocked.filter(function (slot) {
-        return slotsBetween(exceptionDraft.start, exceptionDraft.end).indexOf(slot) !== -1;
-      }) : [],
-      breaks: exceptionDraft.breaks.map(function (br) {
-        return { start: br.start, end: br.end };
-      })
-    };
-    try {
-      writeAvailability(stored.weeks);
-    } catch (error) {
-      message.textContent = "לא ניתן לשמור במכשיר זה.";
-      return;
-    }
-    message.textContent = "השעות החריגות נשמרו במכשיר זה בלבד. יומן הלקוחות לא עודכן.";
-    renderWeek();
+    field.addEventListener("input", paintOrders);
+    field.addEventListener("change", paintOrders);
   });
-  document.getElementById("exception-clear").addEventListener("click", function () {
-    var message = document.getElementById("exception-status");
-    var dateValue = document.getElementById("exception-date").value;
-    var stored;
-    if (!dateValue || !exceptions[dateValue]) {
-      message.textContent = "אין שעות חריגות למחוק בתאריך שנבחר.";
-      return;
-    }
-    stored = readAvailability();
-    exceptions = stored.exceptions;
-    delete exceptions[dateValue];
-    try {
-      writeAvailability(stored.weeks);
-    } catch (error) {
-      message.textContent = "לא ניתן למחוק במכשיר זה.";
-      return;
-    }
-    loadException(dateValue);
-    message.textContent = "השעות החריגות נמחקו מהמכשיר הזה.";
-    renderWeek();
-  });
-
   document.getElementById("admin-confirm-yes").addEventListener("click", function () {
     var dialog = document.getElementById("admin-confirm");
     if (cancelId) {
       ordersApi.cancel(cancelId, { by: "admin" });
       cancelId = "";
-      feedback("התור סומן כבוטל במכשיר זה בלבד. לא נשלחה התראה.");
+      setFeedback("התור סומן כבוטל במכשיר זה בלבד. לא נשלחה התראה.");
       refreshLists();
     }
     dialog.close();
@@ -1023,7 +879,6 @@
     cancelId = "";
     document.getElementById("admin-confirm").close();
   });
-
   document.getElementById("business-form").addEventListener("submit", function (event) {
     var message = document.getElementById("biz-status");
     var current = readSettings();
@@ -1077,29 +932,13 @@
     }
     message.textContent = "ההגדרות נשמרו במכשיר זה בלבד. מחירי עמודי הלקוח ומשך התורים שם לא השתנו.";
   });
-
   each(document.querySelectorAll("[data-admin-panel]"), function (button) {
     button.addEventListener("click", function () {
       showPanel(button.getAttribute("data-admin-panel"));
     });
   });
-  each(document.querySelectorAll("[data-request-filter]"), function (button) {
-    button.addEventListener("click", function () {
-      requestFilter = button.getAttribute("data-request-filter");
-      each(document.querySelectorAll("[data-request-filter]"), function (item) {
-        item.setAttribute("aria-pressed", item === button ? "true" : "false");
-      });
-      paintRequests();
-    });
-  });
 
-  var knownPanels = { dashboard: true, requests: true, calendar: true, approved: true, settings: true };
-  var opening = String(window.location.hash || "").replace("#", "");
-  if (!knownPanels[opening]) {
-    opening = "dashboard";
-  }
   loadWeek();
-  paintException();
   fillSettings();
-  showPanel(opening);
+  showPanel(String(window.location.hash || "").replace("#", ""));
 })();
