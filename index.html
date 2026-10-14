@@ -18,7 +18,7 @@
   <link rel="preload" as="image" href="assets/logo/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bellefair&family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script>document.documentElement.classList.add("js");</script>
 </head>
@@ -59,10 +59,13 @@
       </div>
 
       <div class="hero__content">
-        <h1 class="hero__title reveal">
-          <img class="hero__logo" src="assets/logo/logo.png" alt="" width="1090" height="1183">
-          <span class="visually-hidden">VIP</span>
-        </h1>
+        <div class="hero__lockup">
+          <h1 class="hero__title reveal">
+            <img class="hero__logo" src="assets/logo/logo.png" alt="" width="1090" height="1183">
+            <span class="visually-hidden">VIP</span>
+          </h1>
+          <p class="hero__note reveal">תספורת וטיפוח עד הבית. זאבי הנאו מגיע עם הציוד, ובוחרים את השירות שמתאים, בלי נסיעה ובלי המתנה במספרה.</p>
+        </div>
 
         <div class="hero__ornament reveal" aria-hidden="true">
           <span></span>
@@ -74,30 +77,12 @@
 
         <div class="hero__actions">
           <div class="reveal">
-            <a class="btn btn--gold" href="booking.html">קבע תור</a>
-          </div>
-          <div class="reveal">
-            <a class="btn btn--ghost" href="#service">גלה את חוויית ה־VIP</a>
+            <a class="btn btn--gold" href="services.html">קבע תור</a>
           </div>
         </div>
       </div>
     </section>
-
-    <section id="service" class="service-intro" aria-labelledby="service-title">
-      <p class="service-intro__kicker">זאבי הנאו</p>
-      <h2 id="service-title">תספורת מדויקת, אצלך בבית</h2>
-      <p>זאבי הנאו מגיע עם הציוד עד הבית. בוחרים שירות, קובעים שעה, והתספורת מתבצעת אצלך — בלי נסיעה ובלי המתנה במספרה. השירות כולל תספורת גברים, סידור זקן, תספורת ילדים וחבילות VIP.</p>
-      <div class="service-intro__links">
-        <a class="btn btn--gold" href="booking.html">קבע תור</a>
-        <a class="btn btn--ghost" href="services.html">לכל השירותים</a>
-      </div>
-    </section>
   </main>
-
-  <footer class="site-footer">
-    <p>VIP · זאבי הנאו</p>
-  </footer>
-  <script src="js/demo-data.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

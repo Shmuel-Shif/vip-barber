@@ -13,28 +13,29 @@ window.VIP_DEMO = {
     {
       id: "mens-haircut",
       name: "תספורת גברים",
-      summary: "תספורת מדויקת אצלך בבית, בקו נקי שמתאים לשיער ולסגנון.",
+      summary: "תספורת בהתאמה אישית.",
       priceIls: 65,
-      temporaryPrice: true
-    },
-    {
-      id: "beard",
-      name: "סידור זקן",
-      summary: "עיצוב וטיפוח זקן עד הבית, בקו חד ובלי המתנה במספרה.",
-      priceIls: 15,
       temporaryPrice: true
     },
     {
       id: "kids-haircut",
       name: "תספורת ילדים",
-      summary: "תספורת רגועה לילדים, בבית ובקצב שנוח להם.",
+      summary: "תספורת לילדים באווירה נעימה, עם תוצאה מדויקת לכל גיל.",
       priceIls: 55,
       temporaryPrice: true
     },
     {
+      id: "beard",
+      name: "סידור זקן",
+      summary: "תוספת לביקור, לא כרטיס שירות נפרד.",
+      priceIls: 15,
+      temporaryPrice: true,
+      addon: true
+    },
+    {
       id: "vip-package",
       name: "חבילת VIP",
-      summary: "ביקור משולב של תספורת וטיפוח, בתיאום אישי עם זאבי הנאו.",
+      summary: "חוויית טיפוח אישית עד הבית, עם שירות מוקפד, תשומת לב לכל פרט והתאמה לסגנון שלך.",
       priceIls: null,
       priceOnRequest: true
     }

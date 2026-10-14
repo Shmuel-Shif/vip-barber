@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#070707">
-  <meta name="description" content="השירותים של זאבי הנאו: תספורת גברים, סידור זקן, תספורת ילדים וחבילת VIP, עד הבית.">
+  <meta name="description" content="השירותים של זאבי הנאו: תספורת גברים, תספורת ילדים וחבילת VIP, עד הבית.">
   <title>שירותים — זאבי הנאו - VIP</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="style.css">
   <script>document.documentElement.classList.add("js");</script>
 </head>
-<body>
+<body class="services-screen">
   <a class="skip-link" href="#content">דלג לתוכן</a>
   <header class="site-header">
     <a class="brand" href="index.html" aria-label="VIP, דף הבית">
@@ -33,26 +33,18 @@
     </nav>
   </header>
   <main id="content">
-    <section class="services-hero" aria-labelledby="services-title">
-      <p class="services-hero__kicker">VIP</p>
-      <h1 id="services-title">השירותים שלנו</h1>
-      <p>תספורת וטיפוח עד הבית. זאבי הנאו מגיע עם הציוד, ובוחרים את השירות שמתאים — בלי נסיעה ובלי המתנה במספרה.</p>
-      <div class="services-hero__rule" aria-hidden="true"><span></span><i></i><span></span></div>
-    </section>
-
-    <section class="services-board" aria-labelledby="services-list-title">
-      <h2 id="services-list-title" class="visually-hidden">רשימת השירותים</h2>
+    <section class="services-board" aria-labelledby="services-title">
+      <div class="services-heading">
+        <h1 id="services-title">השירותים שלנו</h1>
+        <span class="services-heading__bar" aria-hidden="true"></span>
+      </div>
       <div id="service-catalog" class="service-grid"></div>
-      <p id="service-selection" class="service-selection" role="status" aria-live="polite"></p>
+      <p id="service-selection" class="visually-hidden" role="status" aria-live="polite"></p>
       <noscript>
         <p class="services-fallback">כדי לראות את כרטיסי השירות צריך לאפשר JavaScript. אין כאן הזמנה אמיתית.</p>
       </noscript>
-      <a class="text-link" href="index.html">חזרה לדף הבית</a>
     </section>
   </main>
-  <footer class="site-footer">
-    <p>VIP · זאבי הנאו</p>
-  </footer>
   <script src="js/demo-data.js"></script>
   <script src="script.js"></script>
 </body>
