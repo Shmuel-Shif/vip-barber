@@ -1,7 +1,7 @@
 /*
  * Browser client only. The key is the publishable key, not the service_role key and not a password.
  * connected stays false until a real Supabase request has been confirmed.
- * Orders still live in local storage. This file does not read or delete them.
+ * This file does not read or delete local orders.
  *
  * window.VIP_SUPABASE is assigned before any network call, so the object exists
  * as soon as this file has run, even if the CDN library is still loading.
@@ -76,13 +76,251 @@
     });
   }
 
+  function whenReady() {
+    if (ensureClient()) {
+      return Promise.resolve(client);
+    }
+    return new Promise(function (resolve) {
+      var waited = 0;
+      var timer = window.setInterval(function () {
+        waited += 50;
+        if (ensureClient() || waited >= 8000) {
+          window.clearInterval(timer);
+          resolve(client);
+        }
+      }, 50);
+    });
+  }
+
+  function messageFor(error) {
+    var raw = error && error.message ? String(error.message) : (typeof error === "string" ? error : "");
+    var text = raw.toLowerCase();
+    if (!raw) {
+      return "הפעולה נכשלה.";
+    }
+    if (text.indexOf("invalid login") !== -1 || text.indexOf("invalid credentials") !== -1) {
+      return "האימייל או הסיסמה לא נכונים.";
+    }
+    if (text.indexOf("already registered") !== -1 || text.indexOf("already been registered") !== -1) {
+      return "כבר יש חשבון עם האימייל הזה. אפשר להתחבר.";
+    }
+    if (text.indexOf("email not confirmed") !== -1) {
+      return "צריך לאשר את האימייל לפני ההתחברות.";
+    }
+    if (text.indexOf("password") !== -1 && (text.indexOf("least") !== -1 || text.indexOf("short") !== -1 || text.indexOf("weak") !== -1)) {
+      return "הסיסמה צריכה 6 תווים לפחות.";
+    }
+    if (text.indexOf("signups not allowed") !== -1 || (text.indexOf("signup") !== -1 && text.indexOf("disabled") !== -1)) {
+      return "ההרשמה סגורה בשרת.";
+    }
+    if (text.indexOf("authentication required") !== -1) {
+      return "צריך להתחבר לפני שליחת ההזמנה.";
+    }
+    if (text.indexOf("profile missing") !== -1) {
+      return "החשבון עדיין לא מוכן. נסו להתחבר שוב.";
+    }
+    if (text.indexOf("time already taken") !== -1) {
+      return "השעה הזו כבר תפוסה.";
+    }
+    if (text.indexOf("outside the open booking week") !== -1) {
+      return "התאריך מחוץ לשבוע הפתוח להזמנה.";
+    }
+    if (text.indexOf("outside open hours") !== -1) {
+      return "השעה מחוץ לשעות הפעילות.";
+    }
+    if (text.indexOf("overlaps a break") !== -1 || text.indexOf("blocked") !== -1) {
+      return "השעה הזו חסומה.";
+    }
+    if (text === "closed") {
+      return "היום סגור.";
+    }
+    if (text.indexOf("invalid appointment") !== -1) {
+      return "פרטי ההזמנה לא תקינים.";
+    }
+    if (text.indexOf("admin only") !== -1) {
+      return "הפעולה הזו שמורה לחשבון האדמין.";
+    }
+    if (text.indexOf("customer cannot change") !== -1) {
+      return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
+    }
+    if (text.indexOf("order not found") !== -1) {
+      return "ההזמנה לא נמצאה בחשבון.";
+    }
+    if (text.indexOf("more than 7") !== -1 || text.indexOf("7 hours") !== -1) {
+      return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
+    }
+    return raw;
+  }
+
+  function withClient(task) {
+    return whenReady().then(function (ready) {
+      if (!ready) {
+        return { data: null, error: "Supabase לא נטען בדף." };
+      }
+      return task(ready);
+    });
+  }
+
+  function currentSession() {
+    return withClient(function (ready) {
+      return ready.auth.getSession().then(function (result) {
+        if (result.error) {
+          return { session: null, error: messageFor(result.error) };
+        }
+        return { session: result.data && result.data.session ? result.data.session : null, error: "" };
+      });
+    });
+  }
+
+  function currentProfile() {
+    return currentSession().then(function (result) {
+      if (!result.session || !client) {
+        return { profile: null, session: result.session, error: result.error };
+      }
+      return client.from("profiles").select("role, full_name, phone").eq("id", result.session.user.id).maybeSingle().then(function (profileResult) {
+        if (profileResult.error) {
+          return { profile: null, session: result.session, error: messageFor(profileResult.error) };
+        }
+        return { profile: profileResult.data, session: result.session, error: "" };
+      });
+    });
+  }
+
+  function mapOrder(row) {
+    var time = row && row.appointment_time ? String(row.appointment_time) : "";
+    if (time.length >= 5) {
+      time = time.slice(0, 5);
+    }
+    return {
+      id: row.id,
+      customerId: row.customer_id || "",
+      server: true,
+      status: row.status || "pending",
+      adults: row.adults || 0,
+      children: row.children || 0,
+      beards: row.beards || 0,
+      vip: 0,
+      date: row.appointment_date || "",
+      time: time,
+      photo: "",
+      customer: {
+        fullName: row.full_name || "",
+        phone: row.phone || "",
+        city: row.city || "",
+        street: row.street || "",
+        houseNumber: row.house_number || "",
+        entrance: row.entrance || "",
+        floor: row.floor || "",
+        apartment: row.apartment || "",
+        entryCode: row.entry_code || "",
+        notes: row.notes || "",
+        payment: row.payment || ""
+      }
+    };
+  }
+
   var api = {
     connected: false,
     url: url,
     client: null,
     lastCheck: null,
     createClient: createClient,
-    checkConnection: checkConnection
+    checkConnection: checkConnection,
+    whenReady: whenReady,
+    messageFor: messageFor,
+    session: currentSession,
+    profile: currentProfile,
+    signUp: function (email, password) {
+      return withClient(function (ready) {
+        return ready.auth.signUp({
+          email: email,
+          password: password,
+          options: {
+            emailRedirectTo: window.location.origin + window.location.pathname
+          }
+        }).then(function (result) {
+          if (result.error) {
+            return { session: null, needsConfirm: false, error: messageFor(result.error) };
+          }
+          var session = result.data && result.data.session ? result.data.session : null;
+          return { session: session, needsConfirm: !session, error: "" };
+        });
+      });
+    },
+    signIn: function (email, password) {
+      return withClient(function (ready) {
+        return ready.auth.signInWithPassword({
+          email: email,
+          password: password
+        }).then(function (result) {
+          if (result.error) {
+            return { session: null, error: messageFor(result.error) };
+          }
+          return { session: result.data && result.data.session ? result.data.session : null, error: "" };
+        });
+      });
+    },
+    signOut: function () {
+      return withClient(function (ready) {
+        return ready.auth.signOut().then(function () {
+          return true;
+        });
+      });
+    },
+    requestAppointment: function (fields) {
+      return withClient(function (ready) {
+        var clock = String(fields.time || "");
+        if (clock.length === 5) {
+          clock = clock + ":00";
+        }
+        return ready.rpc("request_appointment", {
+          p_adults: fields.adults,
+          p_children: fields.children,
+          p_beards: fields.beards,
+          p_date: fields.date,
+          p_time: clock,
+          p_full_name: fields.fullName,
+          p_phone: fields.phone,
+          p_city: fields.city || "",
+          p_street: fields.street || "",
+          p_house_number: fields.houseNumber || "",
+          p_entrance: fields.entrance || "",
+          p_floor: fields.floor || "",
+          p_apartment: fields.apartment || "",
+          p_entry_code: fields.entryCode || "",
+          p_notes: fields.notes || "",
+          p_payment: fields.payment
+        }).then(function (result) {
+          if (result.error) {
+            return { id: "", error: messageFor(result.error) };
+          }
+          return { id: result.data || "", error: "" };
+        });
+      });
+    },
+    fetchOrders: function () {
+      return withClient(function (ready) {
+        return ready.from("orders").select("id, customer_id, status, adults, children, beards, appointment_date, appointment_time, full_name, phone, city, street, house_number, entrance, floor, apartment, entry_code, notes, payment").order("created_at", { ascending: false }).then(function (result) {
+          if (result.error) {
+            return { rows: [], error: messageFor(result.error) };
+          }
+          return {
+            rows: (result.data || []).map(mapOrder),
+            error: ""
+          };
+        });
+      });
+    },
+    orderAction: function (name, id) {
+      return withClient(function (ready) {
+        return ready.rpc(name, { p_id: id }).then(function (result) {
+          if (result.error) {
+            return { error: messageFor(result.error) };
+          }
+          return { error: "" };
+        });
+      });
+    }
   };
   window.VIP_SUPABASE = api;
 

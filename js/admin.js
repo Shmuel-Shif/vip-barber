@@ -10,13 +10,7 @@
   var passwordToggle = document.getElementById("admin-password-toggle");
   var loginError = document.getElementById("admin-login-error");
   var usernameInput = document.getElementById("admin-username");
-  var fixedUsername = window.VIP_DEMO && window.VIP_DEMO.owner && window.VIP_DEMO.owner.adminUsername
-    ? window.VIP_DEMO.owner.adminUsername
-    : "zeevi";
-
-  if (usernameInput) {
-    usernameInput.value = fixedUsername;
-  }
+  var serverMode = false;
 
   function showLoginError(message) {
     if (!loginError) {
@@ -40,7 +34,7 @@
   var devExit = document.getElementById("admin-dev-exit");
   var devKey = "vip-admin-dev-open";
 
-  function openAdminForDevelopment() {
+  function showAdmin() {
     var app = document.getElementById("admin-app");
     var login = document.getElementById("admin-login");
     document.body.classList.remove("admin-locked");
@@ -53,6 +47,14 @@
     if (devExit) {
       devExit.hidden = false;
     }
+  }
+
+  function openAdminForDevelopment() {
+    serverMode = false;
+    if (window.VIP_ORDERS && window.VIP_ORDERS.watchServer) {
+      window.VIP_ORDERS.watchServer(false);
+    }
+    showAdmin();
     try {
       sessionStorage.setItem(devKey, "1");
     } catch (error) {
@@ -63,6 +65,11 @@
   function closeAdminDevelopment() {
     var app = document.getElementById("admin-app");
     var login = document.getElementById("admin-login");
+    var signingOut = serverMode;
+    serverMode = false;
+    if (window.VIP_ORDERS && window.VIP_ORDERS.watchServer) {
+      window.VIP_ORDERS.watchServer(false);
+    }
     document.body.classList.add("admin-locked");
     if (login) {
       login.hidden = false;
@@ -76,7 +83,10 @@
     try {
       sessionStorage.removeItem(devKey);
     } catch (error) {
-      return;
+      serverMode = false;
+    }
+    if (signingOut && window.VIP_SUPABASE && window.VIP_SUPABASE.signOut) {
+      window.VIP_SUPABASE.signOut();
     }
   }
 
@@ -86,41 +96,91 @@
   if (devExit) {
     devExit.addEventListener("click", closeAdminDevelopment);
   }
-  try {
-    if (sessionStorage.getItem(devKey) === "1") {
-      openAdminForDevelopment();
+  function restoreDevelopmentDoor() {
+    try {
+      if (sessionStorage.getItem(devKey) === "1") {
+        openAdminForDevelopment();
+        if (typeof refreshLists === "function") {
+          refreshLists();
+        }
+      }
+    } catch (error) {
+      return;
     }
-  } catch (error) {
-    /* This browser blocked sessionStorage. The dev button still opens the admin. */
+  }
+
+  function openServerAdmin() {
+    serverMode = true;
+    try {
+      sessionStorage.removeItem(devKey);
+    } catch (error) {
+      serverMode = true;
+    }
+    showAdmin();
+    if (!window.VIP_ORDERS || !window.VIP_ORDERS.reloadAccount) {
+      return;
+    }
+    window.VIP_ORDERS.watchServer(true);
+    window.VIP_ORDERS.reloadAccount().then(function (result) {
+      if (result && result.error) {
+        setFeedback(result.error);
+      }
+      if (typeof refreshLists === "function") {
+        refreshLists();
+      }
+    });
   }
 
   if (loginForm) {
     loginForm.addEventListener("submit", function (event) {
-      var username = usernameInput ? usernameInput.value.trim() : "";
-      var passwordMissing = !passwordInput || passwordInput.value.length === 0;
+      var email = usernameInput ? usernameInput.value.trim() : "";
+      var password = passwordInput ? passwordInput.value : "";
+      var auth = window.VIP_SUPABASE;
       event.preventDefault();
-      if (passwordInput) {
-        passwordInput.value = "";
-        passwordInput.setAttribute("type", "password");
-      }
-      if (passwordToggle) {
-        passwordToggle.textContent = "הצגה";
-        passwordToggle.setAttribute("aria-pressed", "false");
-        passwordToggle.setAttribute("aria-label", "הצגת הסיסמה");
-      }
-      if (!username) {
-        showLoginError("יש למלא את שם המשתמש.");
+      if (!email || email.indexOf("@") === -1) {
+        showLoginError("יש למלא אימייל.");
         return;
       }
-      if (passwordMissing) {
+      if (!password) {
         showLoginError("יש למלא את הסיסמה.");
         return;
       }
-      if (username !== fixedUsername) {
-        showLoginError("אין הרשמה למנהלים. חשבון המנהל הקבוע הוא " + fixedUsername + ".");
+      if (!auth || !auth.signIn || !auth.profile) {
+        showLoginError("החיבור לשרת לא נטען בעמוד.");
         return;
       }
-      showLoginError("ההתחברות עדיין לא מחוברת. זה מסך עיצוב בלבד ולא אבטחה: הסיסמה לא נבדקת ולא נשמרת. אזור הניהול יישאר סגור עד חיבור Supabase, ואז האימות והרשאת המנהל ייבדקו בשרת.");
+      showLoginError("בודקים את החשבון...");
+      auth.signIn(email, password).then(function (result) {
+        if (passwordInput) {
+          passwordInput.value = "";
+          passwordInput.setAttribute("type", "password");
+        }
+        if (passwordToggle) {
+          passwordToggle.textContent = "הצגה";
+          passwordToggle.setAttribute("aria-pressed", "false");
+          passwordToggle.setAttribute("aria-label", "הצגת הסיסמה");
+        }
+        if (!result || result.error || !result.session) {
+          showLoginError(result && result.error ? result.error : "האימייל או הסיסמה לא נכונים.");
+          return null;
+        }
+        return auth.profile();
+      }).then(function (result) {
+        if (!result) {
+          return;
+        }
+        if (result.error || !result.profile || result.profile.role !== "admin") {
+          if (auth.signOut) {
+            auth.signOut();
+          }
+          showLoginError(result.profile && result.profile.role !== "admin" ? "החשבון הזה אינו אדמין." : (result.error || "החשבון הזה אינו אדמין."));
+          return;
+        }
+        if (loginError) {
+          loginError.hidden = true;
+        }
+        openServerAdmin();
+      });
     });
   }
 
@@ -727,17 +787,13 @@
       approve.className = "btn btn--gold";
       approve.textContent = "אישור";
       approve.addEventListener("click", function () {
-        ordersApi.approve(order.id);
-        setFeedback("התור סומן כמאושר במכשיר זה בלבד. לא נשלחה התראה.");
-        refreshLists();
+        applyOrderAction(ordersApi.approve(order.id), "התור סומן כמאושר במכשיר זה בלבד. לא נשלחה התראה.", "התור אושר בשרת. לא נשלחה התראה.");
       });
       reject.type = "button";
       reject.className = "btn btn--ghost";
       reject.textContent = "דחייה";
       reject.addEventListener("click", function () {
-        ordersApi.reject(order.id);
-        setFeedback("הבקשה סומנה כנדחתה במכשיר זה בלבד. לא נשלחה התראה.");
-        refreshLists();
+        applyOrderAction(ordersApi.reject(order.id), "הבקשה סומנה כנדחתה במכשיר זה בלבד. לא נשלחה התראה.", "הבקשה נדחתה בשרת. לא נשלחה התראה.");
       });
       row.appendChild(approve);
       row.appendChild(reject);
@@ -874,6 +930,22 @@
       card.appendChild(button);
       target.appendChild(card);
     });
+  }
+
+  function applyOrderAction(result, localText, serverText) {
+    if (result && typeof result.then === "function") {
+      result.then(function (outcome) {
+        if (!outcome || outcome.error) {
+          setFeedback(outcome && outcome.error ? outcome.error : "הפעולה נכשלה.");
+          return;
+        }
+        setFeedback(serverText);
+        refreshLists();
+      });
+      return;
+    }
+    setFeedback(localText);
+    refreshLists();
   }
 
   function setFeedback(text) {
@@ -1055,10 +1127,8 @@
   document.getElementById("admin-confirm-yes").addEventListener("click", function () {
     var dialog = document.getElementById("admin-confirm");
     if (cancelId) {
-      ordersApi.cancel(cancelId, { by: "admin" });
+      applyOrderAction(ordersApi.cancel(cancelId, { by: "admin" }), "התור סומן כבוטל במכשיר זה בלבד. לא נשלחה התראה.", "התור בוטל בשרת. לא נשלחה התראה.");
       cancelId = "";
-      setFeedback("התור סומן כבוטל במכשיר זה בלבד. לא נשלחה התראה.");
-      refreshLists();
     }
     dialog.close();
   });
@@ -1128,4 +1198,16 @@
   loadWeek();
   fillSettings();
   showPanel(String(window.location.hash || "").replace("#", ""));
+
+  if (window.VIP_SUPABASE && window.VIP_SUPABASE.profile) {
+    window.VIP_SUPABASE.profile().then(function (result) {
+      if (result && result.profile && result.profile.role === "admin" && result.session) {
+        openServerAdmin();
+        return;
+      }
+      restoreDevelopmentDoor();
+    });
+  } else {
+    restoreDevelopmentDoor();
+  }
 })();

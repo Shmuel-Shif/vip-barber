@@ -29,10 +29,10 @@
     <section class="admin-login" id="admin-login" aria-labelledby="admin-login-title">
       <img class="admin-login__logo" src="assets/logo/logo.png" alt="לוגו VIP" width="1090" height="1183">
       <h1 id="admin-login-title">אזור הניהול</h1>
-      <p class="admin-login__note">מסך עיצוב בלבד, לא אבטחה. הסיסמה לא נבדקת ולא נשמרת. חשבון המנהל הקבוע הוא zeevi, ואין הרשמה למנהלים נוספים. אחרי חיבור Supabase ההתחברות תיבדק בשרת.</p>
-      <form id="admin-login-form" method="post" action="admin.html" autocomplete="off" novalidate onsubmit="return false">
-        <label class="admin-field" for="admin-username">שם משתמש
-          <input id="admin-username" name="username" type="text" value="zeevi" maxlength="80" autocomplete="off" spellcheck="false" enterkeyhint="next">
+      <p class="admin-login__note">ההתחברות נבדקת בשרת. רק חשבון שהוגדר כאדמין נכנס. אין הרשמה לאדמין מהמסך הזה.</p>
+      <form id="admin-login-form" method="post" action="admin.html" autocomplete="on" novalidate onsubmit="return false">
+        <label class="admin-field" for="admin-username">אימייל
+          <input id="admin-username" name="email" type="email" maxlength="200" autocomplete="username" spellcheck="false" enterkeyhint="next">
         </label>
         <div class="admin-field">
           <label for="admin-password">סיסמה</label>
@@ -81,7 +81,7 @@
 
     <section class="admin-panel" data-admin-section="day" hidden aria-labelledby="day-title">
       <h1 id="day-title">הלוז היומי שלי</h1>
-      <p class="admin-note">תורים שנשמרו במכשיר זה בלבד. אין כאן הזמנות לדוגמה.</p>
+      <p class="admin-note">עם חשבון אדמין מוצגים התורים מהשרת. כניסה זמנית לפיתוח מציגה את מה שנשמר במכשיר זה.</p>
       <div class="cal__nav admin-day-nav">
         <button type="button" id="day-prev">יום קודם</button>
         <h2 id="day-label"></h2>
@@ -92,7 +92,7 @@
 
     <section class="admin-panel" data-admin-section="orders" hidden aria-labelledby="orders-title">
       <h1 id="orders-title">כל ההזמנות</h1>
-      <p class="admin-note">הרשימה מגיעה מההזמנות שנשמרו במכשיר זה. ביטול תור מאושר דורש אישור.</p>
+      <p class="admin-note">חשבון אדמין רואה את כל ההזמנות בשרת. כניסה זמנית לפיתוח רואה רק את המכשיר הזה. ביטול תור מאושר דורש אישור.</p>
       <div id="admin-notice-list"></div>
       <div class="admin-tools">
         <label>סטטוס
@@ -117,7 +117,7 @@
 
     <section class="admin-panel" data-admin-section="pending" hidden aria-labelledby="pending-title">
       <h1 id="pending-title">ממתינות לאישור</h1>
-      <p class="admin-note">רק בקשות שממתינות. אישור או דחייה נשמרים במכשיר זה, בלי התראה ללקוח.</p>
+      <p class="admin-note">רק בקשות שממתינות. בחשבון אדמין האישור והדחייה נשמרים בשרת. אין עדיין התראה ללקוח.</p>
       <p id="pending-feedback" class="admin-feedback" role="status"></p>
       <div id="pending-list"></div>
     </section>

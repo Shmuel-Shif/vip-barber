@@ -219,8 +219,15 @@
   "use strict";
 
   var storageKey = "vip-orders";
+  var viewingServer = false;
+  var serverCache = [];
+  var accountCache = [];
 
-  function readOrders() {
+  function isServerId(id) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || ""));
+  }
+
+  function readLocal() {
     try {
       var raw = localStorage.getItem(storageKey);
       var list = raw ? JSON.parse(raw) : [];
@@ -240,6 +247,13 @@
     }
   }
 
+  function readOrders() {
+    if (viewingServer) {
+      return serverCache.slice();
+    }
+    return readLocal();
+  }
+
   function writeOrders(list) {
     localStorage.setItem(storageKey, JSON.stringify(list));
   }
@@ -257,9 +271,10 @@
       date: order.date || "",
       time: order.time || "",
       customer: order.customer || {},
-      photo: order.photo || ""
+      photo: order.photo || "",
+      serverId: order.serverId || ""
     };
-    if (window.VIP_SCHEDULE && window.VIP_SCHEDULE.slotOpen && !window.VIP_SCHEDULE.slotOpen(saved.date, saved.time)) {
+    if (!order.fromServer && window.VIP_SCHEDULE && window.VIP_SCHEDULE.slotOpen && !window.VIP_SCHEDULE.slotOpen(saved.date, saved.time)) {
       return null;
     }
     list.unshift(saved);
@@ -283,12 +298,56 @@
     writeOrders(list);
   }
 
+  function mirrorLocal(serverId, status) {
+    if (!serverId) {
+      return;
+    }
+    var list = readLocal().map(function (item) {
+      if (item.serverId === serverId) {
+        item.status = status;
+        if (status === "cancelled") {
+          item.cancelledAt = new Date().toISOString();
+        }
+      }
+      return item;
+    });
+    try {
+      writeOrders(list);
+    } catch (error) {
+      return;
+    }
+  }
+
+  function serverResult(name, id, status) {
+    var auth = window.VIP_SUPABASE;
+    if (!auth || !auth.orderAction) {
+      return Promise.resolve(null);
+    }
+    return auth.orderAction(name, id).then(function (result) {
+      if (!result || result.error) {
+        return { id: id, error: result && result.error ? result.error : "הפעולה נכשלה." };
+      }
+      mirrorLocal(id, status);
+      return reloadAccount().then(function () {
+        return { id: id, status: status, server: true };
+      });
+    });
+  }
+
   function approveOrder(id) {
+    if (isServerId(id)) {
+      return serverResult("approve_order", id, "approved");
+    }
     setOrderStatus(id, "approved");
+    return { id: id, status: "approved" };
   }
 
   function rejectOrder(id) {
+    if (isServerId(id)) {
+      return serverResult("reject_order", id, "rejected");
+    }
     setOrderStatus(id, "rejected");
+    return { id: id, status: "rejected" };
   }
 
   function appointmentAt(order) {
@@ -309,8 +368,27 @@
     return point.getTime() - Date.now() > 7 * 60 * 60 * 1000;
   }
 
+  function reloadAccount() {
+    var auth = window.VIP_SUPABASE;
+    if (!auth || !auth.fetchOrders) {
+      return Promise.resolve({ rows: accountCache, error: "" });
+    }
+    return auth.fetchOrders().then(function (result) {
+      if (result && !result.error) {
+        accountCache = result.rows || [];
+        if (viewingServer) {
+          serverCache = accountCache.slice();
+        }
+      }
+      return result || { rows: accountCache, error: "" };
+    });
+  }
+
   function cancelOrder(id, meta) {
     var by = meta && meta.by === "customer" ? "customer" : "admin";
+    if (isServerId(id)) {
+      return serverResult(by === "customer" ? "cancel_order" : "admin_cancel_order", id, "cancelled");
+    }
     var current = null;
     readOrders().forEach(function (item) {
       if (item.id === id) {
@@ -343,7 +421,31 @@
     approve: approveOrder,
     reject: rejectOrder,
     cancel: cancelOrder,
-    customerMayCancel: customerMayCancel
+    customerMayCancel: customerMayCancel,
+    accountOrders: function () {
+      return accountCache.slice();
+    },
+    reloadAccount: reloadAccount,
+    forgetAccount: function () {
+      accountCache = [];
+      if (viewingServer) {
+        serverCache = [];
+      }
+    },
+    keepOwn: function (userId) {
+      accountCache = accountCache.filter(function (order) {
+        return order.customerId === userId;
+      });
+    },
+    watchServer: function (on) {
+      viewingServer = !!on;
+      if (on) {
+        serverCache = accountCache.slice();
+      }
+    },
+    usesServer: function () {
+      return viewingServer;
+    }
   };
 })();
 
@@ -1213,39 +1315,97 @@
   var modal = document.getElementById("sent-modal");
   var closeModal = document.getElementById("sent-close");
 
+  var sendStatus = document.getElementById("send-status");
+
+  function saySend(text) {
+    if (sendStatus) {
+      sendStatus.textContent = text;
+    }
+  }
+
   button.addEventListener("click", function () {
+    var auth = window.VIP_SUPABASE;
+    var customer;
+    var photo = "";
     if (!booking.enoughPeople(draft)) {
       window.location.href = "booking.html";
       return;
     }
-    var photo = "";
-    booking.write(draft);
+    draft = booking.read();
+    customer = draft.submitted && (draft.submitted.fullName || draft.submitted.phone) ? draft.submitted : draft.customer;
+    if (!draft.date || !draft.time || !customer.fullName || !customer.phone || !customer.payment) {
+      saySend("חסרים פרטים להזמנה. חזרו לשלב הפרטים.");
+      return;
+    }
+    if (!auth || !auth.whenReady) {
+      saySend("החיבור לשרת לא נטען בעמוד.");
+      return;
+    }
+    button.disabled = true;
+    saySend("שולחים את הבקשה...");
     try {
       photo = sessionStorage.getItem(booking.sentPhotoKey) || "";
     } catch (error) {
       photo = "";
     }
-    if (window.VIP_ORDERS) {
-      var created = window.VIP_ORDERS.add({
+    auth.whenReady().then(function (ready) {
+      if (!ready) {
+        return { id: "", error: "החיבור לשרת לא נטען בעמוד." };
+      }
+      return auth.session();
+    }).then(function (result) {
+      if (result && result.error && !result.session) {
+        return { id: "", error: result.error };
+      }
+      if (!result || !result.session) {
+        return { id: "", error: "כדי לשלוח את הבקשה צריך להתחבר או להירשם. הפרטים נשארים בעמוד." };
+      }
+      return auth.requestAppointment({
         adults: draft.adults,
         children: draft.children,
-        vip: draft.vip,
         beards: draft.beards,
         date: draft.date,
         time: draft.time,
-        customer: draft.submitted && (draft.submitted.fullName || draft.submitted.phone) ? draft.submitted : draft.customer,
-        photo: photo
+        fullName: customer.fullName,
+        phone: customer.phone,
+        city: customer.city,
+        street: customer.street,
+        houseNumber: customer.houseNumber,
+        entrance: customer.entrance,
+        floor: customer.floor,
+        apartment: customer.apartment,
+        entryCode: customer.entryCode,
+        notes: customer.notes,
+        payment: customer.payment
       });
-      if (!created) {
-        draft.time = "";
-        booking.write(draft);
-        window.location.href = "booking-next.html";
+    }).then(function (result) {
+      button.disabled = false;
+      if (!result || result.error || !result.id) {
+        saySend(result && result.error ? result.error : "הבקשה לא נשמרה.");
         return;
       }
-    }
-    if (modal && modal.showModal) {
-      modal.showModal();
-    }
+      if (window.VIP_ORDERS) {
+        window.VIP_ORDERS.add({
+          fromServer: true,
+          serverId: result.id,
+          adults: draft.adults,
+          children: draft.children,
+          vip: draft.vip,
+          beards: draft.beards,
+          date: draft.date,
+          time: draft.time,
+          customer: customer,
+          photo: photo
+        });
+      }
+      saySend("");
+      if (modal && modal.showModal) {
+        modal.showModal();
+      }
+    }).catch(function () {
+      button.disabled = false;
+      saySend("הבקשה לא נשמרה.");
+    });
   });
 
   if (closeModal) {
@@ -1354,8 +1514,19 @@
     return parts.join(" · ") || "לא נבחרה כמות";
   }
 
+  function shownOrders() {
+    var remote = orders.accountOrders ? orders.accountOrders() : [];
+    var remoteIds = {};
+    remote.forEach(function (order) {
+      remoteIds[order.id] = true;
+    });
+    return remote.concat(orders.read().filter(function (order) {
+      return !order.serverId || !remoteIds[order.serverId];
+    }));
+  }
+
   function paint(target, canApprove) {
-    var items = orders.read();
+    var items = shownOrders();
     target.textContent = "";
     if (!items.length) {
       var empty = document.createElement("p");
@@ -1380,6 +1551,9 @@
       where.textContent = addressOf(customer);
       service.textContent = counts(order);
       card.appendChild(status);
+      var source = document.createElement("p");
+      source.textContent = order.server ? "בחשבון" : "נשמר במכשיר זה";
+      card.appendChild(source);
       card.appendChild(when);
       card.appendChild(service);
       card.appendChild(who);
@@ -1424,6 +1598,28 @@
 
   if (list) {
     paint(list, false);
+    function loadOwnOrders() {
+      var auth = window.VIP_SUPABASE;
+      if (!auth || !auth.profile) {
+        return Promise.resolve();
+      }
+      return auth.profile().then(function (result) {
+        if (!result || !result.session || !result.session.user) {
+          orders.forgetAccount();
+          paint(list, false);
+          return null;
+        }
+        return orders.reloadAccount().then(function () {
+          orders.keepOwn(result.session.user.id);
+          paint(list, false);
+        });
+      });
+    }
+    loadOwnOrders();
+    orders.paintCustomerList = function () {
+      paint(list, false);
+    };
+    orders.refreshCustomerList = loadOwnOrders;
   }
   if (requests) {
     paint(requests, true);
@@ -1446,38 +1642,173 @@
     }
   }
 
+  function finishCancel(saved) {
+    if (!saved || saved.error) {
+      if (feedback) {
+        feedback.textContent = saved && saved.error ? saved.error : "אי אפשר לבטל החל מ־7 שעות לפני התור.";
+      }
+    } else if (saved.server) {
+      if (feedback) {
+        feedback.textContent = "ההזמנה בוטלה בחשבון. זאבי יראה את הסטטוס בעמוד הניהול.";
+      }
+    } else {
+      if (window.VIP_NOTICES) {
+        var customer = saved.customer || {};
+        window.VIP_NOTICES.add({
+          orderId: saved.id,
+          text: "הלקוח ביטל תור: " + dateLabel(saved.date) + (saved.time ? " בשעה " + saved.time : "") + (customer.fullName ? ", " + customer.fullName : "")
+        });
+      }
+      if (feedback) {
+        feedback.textContent = "ההזמנה בוטלה במכשיר זה. ההזמנות הישנות במכשיר לא נמחקו.";
+      }
+    }
+    cancelId = "";
+    if (dialog && dialog.close) {
+      dialog.close();
+    }
+    if (list) {
+      paint(list, false);
+    }
+  }
+
   if (confirmYes) {
     confirmYes.addEventListener("click", function () {
       var saved = orders.cancel(cancelId, { by: "customer" });
-      if (!saved) {
-        if (feedback) {
-          feedback.textContent = "אי אפשר לבטל החל מ־7 שעות לפני התור.";
-        }
-      } else {
-        if (window.VIP_NOTICES) {
-          var customer = saved.customer || {};
-          window.VIP_NOTICES.add({
-            orderId: saved.id,
-            text: "הלקוח ביטל תור: " + dateLabel(saved.date) + (saved.time ? " בשעה " + saved.time : "") + (customer.fullName ? ", " + customer.fullName : "")
-          });
-        }
-        if (feedback) {
-          feedback.textContent = "ההזמנה בוטלה במכשיר זה. התראה לזאבי עדיין לא נשלחת, והיא תחובר אחר כך.";
-        }
+      if (saved && typeof saved.then === "function") {
+        saved.then(finishCancel);
+        return;
       }
-      cancelId = "";
-      if (dialog && dialog.close) {
-        dialog.close();
-      }
-      if (list) {
-        paint(list, false);
-      }
+      finishCancel(saved);
     });
   }
   if (confirmNo && dialog) {
     confirmNo.addEventListener("click", function () {
       cancelId = "";
       dialog.close();
+    });
+  }
+})();
+
+(function () {
+  "use strict";
+
+  var form = document.getElementById("account-form");
+  var auth = window.VIP_SUPABASE;
+  if (!form || !auth) {
+    return;
+  }
+
+  var emailInput = document.getElementById("account-email");
+  var passwordInput = document.getElementById("account-password");
+  var status = document.getElementById("account-status");
+  var loginButton = document.getElementById("account-login");
+  var signupButton = document.getElementById("account-signup");
+  var logoutButton = document.getElementById("account-logout");
+
+  function say(text) {
+    if (status) {
+      status.textContent = text;
+    }
+  }
+
+  function credentials() {
+    var email = emailInput ? emailInput.value.trim() : "";
+    var password = passwordInput ? passwordInput.value : "";
+    if (!email || email.indexOf("@") === -1) {
+      say("יש למלא אימייל.");
+      return null;
+    }
+    if (!password || password.length < 6) {
+      say("הסיסמה צריכה 6 תווים לפחות.");
+      return null;
+    }
+    return { email: email, password: password };
+  }
+
+  function showSession(session) {
+    var signedIn = !!(session && session.user);
+    if (loginButton) {
+      loginButton.hidden = signedIn;
+    }
+    if (signupButton) {
+      signupButton.hidden = signedIn;
+    }
+    if (logoutButton) {
+      logoutButton.hidden = !signedIn;
+    }
+    if (emailInput && emailInput.parentNode) {
+      emailInput.parentNode.hidden = signedIn;
+    }
+    if (passwordInput && passwordInput.parentNode) {
+      passwordInput.parentNode.hidden = signedIn;
+    }
+    if (signedIn) {
+      say("מחוברים בתור " + (session.user.email || "") + ".");
+      if (passwordInput) {
+        passwordInput.value = "";
+      }
+    }
+    if (!window.VIP_ORDERS) {
+      return;
+    }
+    if (signedIn && window.VIP_ORDERS.refreshCustomerList) {
+      window.VIP_ORDERS.refreshCustomerList();
+      return;
+    }
+    if (window.VIP_ORDERS.forgetAccount) {
+      window.VIP_ORDERS.forgetAccount();
+    }
+    if (window.VIP_ORDERS.paintCustomerList) {
+      window.VIP_ORDERS.paintCustomerList();
+    }
+  }
+
+  function run(action) {
+    var fields = credentials();
+    if (!fields) {
+      return;
+    }
+    say("בודקים את החשבון...");
+    auth[action](fields.email, fields.password).then(function (result) {
+      if (!result || result.error) {
+        say(result && result.error ? result.error : "הפעולה נכשלה.");
+        return;
+      }
+      if (result.needsConfirm) {
+        say("נפתח חשבון. אם נדרש אישור, פתחו את האימייל ואז התחברו.");
+        if (passwordInput) {
+          passwordInput.value = "";
+        }
+        return;
+      }
+      showSession(result.session);
+    });
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    run("signIn");
+  });
+  if (signupButton) {
+    signupButton.addEventListener("click", function () {
+      run("signUp");
+    });
+  }
+  if (logoutButton) {
+    logoutButton.addEventListener("click", function () {
+      auth.signOut().then(function () {
+        showSession(null);
+        say("יצאתם מהחשבון. ההזמנות שבמכשיר נשארו.");
+      });
+    });
+  }
+
+  if (auth.session) {
+    auth.session().then(function (result) {
+      if (result && result.session) {
+        showSession(result.session);
+      }
     });
   }
 })();

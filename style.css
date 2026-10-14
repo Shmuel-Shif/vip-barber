@@ -2124,7 +2124,7 @@ body:has(.summary) {
 }
 
 .details .summary__send {
-  position: static;
+  position: relative;
   align-self: stretch;
   width: 100%;
   max-width: 100%;
@@ -2928,5 +2928,131 @@ body.admin .admin-compact img {
 
   body.admin .admin-tools {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.site-header,
+.brand,
+.nav-toggle,
+main,
+.summary,
+.details,
+.page,
+.party,
+.cal,
+.avail {
+  min-width: 0;
+}
+
+.brand img {
+  width: auto;
+  max-width: 7.5rem;
+  height: 3.15rem;
+}
+
+#account-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+dialog:not([open]),
+.sent-modal:not([open]),
+.admin-dialog:not([open]) {
+  display: none;
+}
+
+dialog[open],
+.sent-modal[open],
+.admin-dialog[open] {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: min(24rem, calc(100% - 2rem));
+  height: fit-content;
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  overflow: auto;
+  transform: none;
+}
+
+@media (max-width: 719px) {
+  html,
+  body,
+  main {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .site-nav {
+    width: min(18.5rem, 86%);
+    max-width: calc(100% - 2.5rem);
+  }
+
+  .summary,
+  .details,
+  .page,
+  .party,
+  .cal,
+  .avail,
+  body.admin main {
+    width: 100%;
+    max-width: 100%;
+    margin-inline: 0;
+    padding-inline: 0.9rem;
+  }
+
+  .details__choices,
+  .pay-list,
+  .details__pair,
+  body.admin .admin-hour__times {
+    grid-template-columns: 1fr;
+  }
+
+  .btn,
+  .pay-option,
+  .pay-option span {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .site-nav,
+  .site-nav.is-open {
+    transform: none;
+  }
+
+  .site-nav:not(.is-open) {
+    clip-path: inset(0 0 0 100%);
+  }
+
+  .site-nav.is-open {
+    clip-path: none;
+  }
+
+  .cal__continue,
+  body.date-screen .cal__continue,
+  body.date-screen .cal__continue:hover,
+  body.date-screen .cal__continue:active {
+    right: 0.9rem;
+    left: 0.9rem;
+    width: auto;
+    transform: none;
+  }
+
+  .summary__whatsapp {
+    right: auto;
+    left: auto;
+    inset-inline-end: 0.75rem;
+  }
+
+  .install-prompt__card,
+  .notify-prompt__card {
+    width: calc(100% - 0.4rem);
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
   }
 }
