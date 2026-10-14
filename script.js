@@ -178,16 +178,16 @@
   }
 
   function writeBookingDraft(draft) {
-    var people = wholeCount(draft.adults) + wholeCount(draft.children) + wholeCount(draft.vip);
+    var adults = wholeCount(draft.adults);
     var beards = wholeCount(draft.beards);
-    if (beards > people) {
-      beards = people;
+    if (beards > adults) {
+      beards = adults;
     }
     var current = readBookingDraft();
     try {
       sessionStorage.setItem(storageKey, JSON.stringify({
         serviceId: typeof draft.serviceId === "string" ? draft.serviceId : "",
-        adults: wholeCount(draft.adults),
+        adults: adults,
         children: wholeCount(draft.children),
         vip: wholeCount(draft.vip),
         beards: beards,
@@ -382,11 +382,12 @@
   var vipPlus = document.getElementById("vip-plus");
   var beardsMinus = document.getElementById("beards-minus");
   var beardsPlus = document.getElementById("beards-plus");
+  var beardStep = document.getElementById("beard-step");
   var summary = document.getElementById("party-summary");
   var continueLink = document.getElementById("party-continue");
   var adultRate = document.getElementById("adult-rate");
   var childRate = document.getElementById("child-rate");
-  var beardRate = document.getElementById("beard-rate");
+  var beardNote = document.getElementById("beard-note");
 
   var adultPrice = numericPrice("mens-haircut");
   var childPrice = numericPrice("kids-haircut");
@@ -398,14 +399,13 @@
   if (childRate) {
     childRate.textContent = childPrice === null ? "תספורת ילד" : "תספורת ילד, " + childPrice + " ₪ לילד";
   }
-  if (beardRate) {
-    beardRate.textContent = beardPrice === null ? "תוספת" : "תוספת " + beardPrice + " ₪";
+  if (beardNote) {
+    beardNote.textContent = beardPrice === null ? "וסידור זקן תוספת" : "וסידור זקן תוספת " + beardPrice + " ₪";
   }
 
   function paint() {
-    var people = draft.adults + draft.children + draft.vip;
-    if (draft.beards > people) {
-      draft.beards = people;
+    if (draft.beards > draft.adults) {
+      draft.beards = draft.adults;
     }
     booking.write(draft);
     draft = booking.read();
@@ -418,7 +418,10 @@
     childrenMinus.disabled = draft.children < 1;
     vipMinus.disabled = draft.vip < 1;
     beardsMinus.disabled = draft.beards < 1;
-    beardsPlus.disabled = people < 1 || draft.beards >= people;
+    beardsPlus.disabled = draft.adults < 1 || draft.beards >= draft.adults;
+    if (beardStep) {
+      beardStep.hidden = draft.adults < 1;
+    }
 
     fillSummary(summary, draft);
 
@@ -428,8 +431,7 @@
   }
 
   function change(field, delta) {
-    var people = draft.adults + draft.children + draft.vip;
-    if (field === "beards" && delta > 0 && draft.beards >= people) {
+    if (field === "beards" && delta > 0 && draft.beards >= draft.adults) {
       return;
     }
     draft[field] = Math.max(0, draft[field] + delta);

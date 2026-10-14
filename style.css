@@ -1250,6 +1250,39 @@ body.nav-open {
   font-size: 0.85rem;
 }
 
+.party__row--adults {
+  flex-wrap: wrap;
+}
+
+.party__beard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 0.7rem;
+}
+
+.party__beard[hidden] {
+  display: none;
+}
+
+.party__beard p {
+  margin: 0;
+  color: var(--gold-light);
+}
+
+.party__beard .stepper button {
+  width: 1.7rem;
+  height: 1.7rem;
+  font-size: 0.95rem;
+}
+
+.party__beard .stepper span {
+  min-width: 1.15rem;
+  font-size: 0.95rem;
+}
+
 .stepper {
   display: inline-flex;
   align-items: center;

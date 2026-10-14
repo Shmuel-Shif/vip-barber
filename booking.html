@@ -34,18 +34,27 @@
   <main id="content">
     <section class="party" id="party" aria-labelledby="party-title">
       <h1 id="party-title">כמה אנשים מסתפרים?</h1>
-      <p class="party__lead">בוחרים כמה מבוגרים, ילדים וחבילות VIP. סידור זקן הוא תוספת.</p>
+      <p class="party__lead">בוחרים כמה מבוגרים, ילדים וחבילות VIP.</p>
 
       <div class="party__rows">
-        <div class="party__row">
+        <div class="party__row party__row--adults">
           <div>
             <h2 id="adults-label">מבוגרים</h2>
             <p id="adult-rate">תספורת מבוגר</p>
+            <p id="beard-note">וסידור זקן תוספת 15 ₪</p>
           </div>
           <div class="stepper" role="group" aria-labelledby="adults-label">
             <button type="button" id="adults-minus" aria-label="פחות מבוגרים">−</button>
             <span id="adults-count">0</span>
             <button type="button" id="adults-plus" aria-label="עוד מבוגר">+</button>
+          </div>
+          <div class="party__beard" id="beard-step" hidden>
+            <p id="beards-label">סידור זקן</p>
+            <div class="stepper" role="group" aria-labelledby="beards-label">
+              <button type="button" id="beards-minus" aria-label="פחות סידורי זקן">−</button>
+              <span id="beards-count">0</span>
+              <button type="button" id="beards-plus" aria-label="עוד סידור זקן">+</button>
+            </div>
           </div>
         </div>
         <div class="party__row">
@@ -68,17 +77,6 @@
             <button type="button" id="vip-minus" aria-label="פחות חבילות VIP">−</button>
             <span id="vip-count">0</span>
             <button type="button" id="vip-plus" aria-label="עוד חבילת VIP">+</button>
-          </div>
-        </div>
-        <div class="party__row">
-          <div>
-            <h2 id="beards-label">סידור זקן</h2>
-            <p id="beard-rate">תוספת</p>
-          </div>
-          <div class="stepper" role="group" aria-labelledby="beards-label">
-            <button type="button" id="beards-minus" aria-label="פחות סידורי זקן">−</button>
-            <span id="beards-count">0</span>
-            <button type="button" id="beards-plus" aria-label="עוד סידור זקן">+</button>
           </div>
         </div>
       </div>
