@@ -7,8 +7,8 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE TABLE public.profiles (
   id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
   role text NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'admin')),
-  full_name text,
-  phone text,
+  full_name text CHECK (full_name IS NULL OR char_length(full_name) BETWEEN 1 AND 80),
+  phone text CHECK (phone IS NULL OR char_length(phone) BETWEEN 1 AND 20),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -27,6 +27,8 @@ CREATE TABLE public.weekly_hours (
   start_time time,
   end_time time,
   breaks jsonb NOT NULL DEFAULT '[]'::jsonb,
+  -- Same day shape as week overrides and date exceptions. Standing hours save an empty list.
+  blocked text[] NOT NULL DEFAULT '{}',
   CHECK (
     status = 'closed'
     OR (start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)
@@ -79,20 +81,21 @@ CREATE TABLE public.orders (
   appointment_time time NOT NULL,
   service_minutes integer NOT NULL CHECK (service_minutes >= 10 AND service_minutes <= 600),
   travel_minutes integer NOT NULL CHECK (travel_minutes >= 0 AND travel_minutes <= 180),
-  -- Service time only: [start, start + service_minutes).
-  -- Travel is not stored in this range. A later visit must leave one travel gap before it starts.
+  -- Haircut only: [start, start + service_minutes).
+  -- This is the end time shown to the customer. One travel gap is enforced separately
+  -- before the next visit may start. Travel is not stored again inside this range.
   span tstzrange NOT NULL,
-  full_name text NOT NULL,
-  phone text NOT NULL,
-  city text,
-  street text,
-  house_number text,
-  entrance text,
-  floor text,
-  apartment text,
-  entry_code text,
-  notes text,
-  payment text CHECK (payment IN ('paybox', 'cash', 'transfer')),
+  full_name text NOT NULL CHECK (char_length(full_name) BETWEEN 1 AND 80),
+  phone text NOT NULL CHECK (char_length(phone) BETWEEN 1 AND 20),
+  city text CHECK (city IS NULL OR char_length(city) BETWEEN 1 AND 60),
+  street text CHECK (street IS NULL OR char_length(street) BETWEEN 1 AND 80),
+  house_number text CHECK (house_number IS NULL OR char_length(house_number) BETWEEN 1 AND 20),
+  entrance text CHECK (entrance IS NULL OR char_length(entrance) BETWEEN 1 AND 20),
+  floor text CHECK (floor IS NULL OR char_length(floor) BETWEEN 1 AND 10),
+  apartment text CHECK (apartment IS NULL OR char_length(apartment) BETWEEN 1 AND 20),
+  entry_code text CHECK (entry_code IS NULL OR char_length(entry_code) BETWEEN 1 AND 20),
+  notes text CHECK (notes IS NULL OR char_length(notes) BETWEEN 1 AND 400),
+  payment text NOT NULL CHECK (payment IN ('paybox', 'cash', 'transfer')),
   photo_path text,
   cancelled_by text CHECK (cancelled_by IN ('customer', 'admin')),
   cancelled_at timestamptz,
@@ -118,6 +121,7 @@ CREATE TABLE public.admin_notices (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Prices match js/demo-data.js: adult 80, child 60, beard 10.
 INSERT INTO public.services (id, name, price_ils, minutes, addon) VALUES
   ('mens-haircut', 'תספורת גברים', 80, 30, false),
   ('kids-haircut', 'תספורת ילדים', 60, 30, false),

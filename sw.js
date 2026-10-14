@@ -1,4 +1,4 @@
-var CACHE_NAME = "vip-shell-v94";
+var CACHE_NAME = "vip-shell-v97";
 var SHELL = [
   "./index.html",
   "./booking.html",
@@ -11,6 +11,7 @@ var SHELL = [
   "./style.css",
   "./script.js",
   "./js/demo-data.js",
+  "./js/supabase-client.js",
   "./js/admin.js",
   "./manifest.webmanifest",
   "./assets/tools.jpg",
@@ -58,11 +59,17 @@ self.addEventListener("fetch", function (event) {
   }
 
   event.respondWith(
-    fetch(request).then(function (response) {
-      var copy = response.clone();
-      caches.open(CACHE_NAME).then(function (cache) {
-        cache.put(request, copy);
-      });
+    fetch(request.url, {
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "follow"
+    }).then(function (response) {
+      if (response && response.ok && response.type === "basic" && !url.pathname.endsWith("/sw.js")) {
+        var copy = response.clone();
+        caches.open(CACHE_NAME).then(function (cache) {
+          return cache.put(request.url, copy);
+        });
+      }
       return response;
     }).catch(function () {
       return caches.match(request).then(function (cached) {

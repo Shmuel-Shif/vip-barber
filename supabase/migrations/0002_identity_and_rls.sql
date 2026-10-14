@@ -4,6 +4,7 @@
 -- so Supabase creates the user and the session. The page does not invent the id.
 -- Phone, local_order_key, and any id sent in the request do not appear in these policies.
 -- A visitor who is not signed in still cannot read or create orders.
+-- Customers have no UPDATE on orders. Cancel, approve, reject, and admin cancel are functions.
 -- Every new auth user becomes customer. A signed-in user cannot change role to admin.
 
 CREATE OR REPLACE FUNCTION public.is_admin()
@@ -21,7 +22,7 @@ AS $$
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -50,10 +51,23 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF auth.uid() IS NOT NULL AND NEW.role IS DISTINCT FROM OLD.role THEN
-    RAISE EXCEPTION 'role cannot be changed by a signed-in user';
-  END IF;
   NEW.id := OLD.id;
+  NEW.created_at := OLD.created_at;
+  IF auth.uid() IS NOT NULL THEN
+    NEW.role := OLD.role;
+  END IF;
+  IF NEW.full_name IS NOT NULL THEN
+    NEW.full_name := NULLIF(btrim(NEW.full_name), '');
+    IF NEW.full_name IS NOT NULL AND char_length(NEW.full_name) > 80 THEN
+      RAISE EXCEPTION 'invalid profile';
+    END IF;
+  END IF;
+  IF NEW.phone IS NOT NULL THEN
+    NEW.phone := NULLIF(btrim(NEW.phone), '');
+    IF NEW.phone IS NOT NULL AND char_length(NEW.phone) > 20 THEN
+      RAISE EXCEPTION 'invalid profile';
+    END IF;
+  END IF;
   RETURN NEW;
 END;
 $$;
@@ -63,6 +77,9 @@ CREATE TRIGGER profiles_protect_role
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.protect_profile_role();
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.protect_profile_role() FROM PUBLIC, anon, authenticated;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
@@ -98,8 +115,9 @@ GRANT SELECT ON public.date_exceptions TO anon, authenticated;
 GRANT SELECT ON public.business_settings TO anon, authenticated;
 GRANT UPDATE ON public.business_settings TO authenticated;
 
-GRANT SELECT, UPDATE ON public.profiles TO authenticated;
-GRANT SELECT, UPDATE ON public.orders TO authenticated;
+GRANT SELECT ON public.profiles TO authenticated;
+GRANT UPDATE (full_name, phone) ON public.profiles TO authenticated;
+GRANT SELECT ON public.orders TO authenticated;
 GRANT SELECT, UPDATE ON public.admin_notices TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.services TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.weekly_hours TO authenticated;
@@ -164,10 +182,7 @@ CREATE POLICY orders_select_own ON public.orders
   FOR SELECT TO authenticated
   USING (customer_id = auth.uid() OR public.is_admin());
 
-CREATE POLICY orders_update_own_or_admin ON public.orders
-  FOR UPDATE TO authenticated
-  USING (customer_id = auth.uid() OR public.is_admin())
-  WITH CHECK (customer_id = auth.uid() OR public.is_admin());
+-- No UPDATE or INSERT policy. Status changes go through the functions in 0003.
 
 CREATE POLICY notices_admin ON public.admin_notices
   FOR SELECT TO authenticated
