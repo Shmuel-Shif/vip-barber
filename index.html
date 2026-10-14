@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="VIP BARBER. זאבי הנאו מגיע אליך הביתה. המספרה מגיעה עד אליך.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VIP BARBER">
+  <title>VIP BARBER — המספרה מגיעה עד אליך</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="preload" as="image" href="assets/tools.jpg">
+  <link rel="preload" as="image" href="assets/logo/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">דלג לתוכן</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="VIP BARBER, דף הבית">
+      <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="פתיחת תפריט">
+      <span class="hamburger" aria-hidden="true"></span>
+    </button>
+    <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
+      <a href="index.html" aria-current="page">בית</a>
+      <a href="services.html">שירותים</a>
+      <a href="booking.html">קבע תור</a>
+      <a href="about.html">אודות</a>
+      <a href="orders.html">ההזמנות שלי</a>
+    </nav>
+  </header>
+
+  <!-- Tools photograph: Unsplash, photo-1621605815971-fbc98d665033 -->
+  <main id="content">
+    <section class="hero">
+      <div class="hero__media" aria-hidden="true">
+        <div class="hero__zoom">
+          <img class="hero__photo" src="assets/tools.jpg" alt="" width="2400" height="1600" fetchpriority="high" decoding="async">
+        </div>
+        <div class="hero__veil"></div>
+        <div class="hero__grain"></div>
+      </div>
+
+      <div class="hero__frame" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+
+      <div class="hero__content">
+        <h1 class="hero__title reveal">
+          <img class="hero__logo" src="assets/logo/logo.png" alt="" width="1090" height="1183">
+          <span class="visually-hidden">VIP BARBER</span>
+        </h1>
+
+        <div class="hero__ornament reveal" aria-hidden="true">
+          <span></span>
+          <i></i>
+          <span></span>
+        </div>
+
+        <p class="hero__slogan reveal">המספרה מגיעה עד אליך</p>
+
+        <div class="hero__actions">
+          <div class="reveal">
+            <a class="btn btn--gold" href="booking.html">קבע תור</a>
+          </div>
+          <div class="reveal">
+            <a class="btn btn--ghost" href="#service">גלה את חוויית ה־VIP</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="service" class="service-intro" aria-labelledby="service-title">
+      <p class="service-intro__kicker">זאבי הנאו</p>
+      <h2 id="service-title">תספורת מדויקת, אצלך בבית</h2>
+      <p>זאבי הנאו מגיע עם הציוד עד הבית. בוחרים שירות, קובעים שעה, והתספורת מתבצעת אצלך — בלי נסיעה ובלי המתנה במספרה. השירות כולל תספורת גברים, סידור זקן, תספורת ילדים וחבילות VIP.</p>
+      <div class="service-intro__links">
+        <a class="btn btn--gold" href="booking.html">קבע תור</a>
+        <a class="btn btn--ghost" href="services.html">לכל השירותים</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>VIP BARBER · זאבי הנאו</p>
+  </footer>
+  <script src="js/demo-data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
