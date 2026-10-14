@@ -204,6 +204,10 @@
   window.VIP_BOOKING = {
     read: readBookingDraft,
     write: writeBookingDraft,
+    enoughPeople: function (draft) {
+      var item = draft || readBookingDraft();
+      return wholeCount(item.adults) + wholeCount(item.children) >= 2;
+    },
     photoKey: "vip-booking-entrance-photo",
     sentPhotoKey: "vip-booking-sent-photo"
   };
@@ -224,7 +228,9 @@
       return list.filter(function (item) {
         return item && typeof item === "object" && typeof item.id === "string";
       }).map(function (item) {
-        item.status = item.status === "approved" ? "approved" : "pending";
+        if (item.status !== "approved" && item.status !== "rejected" && item.status !== "cancelled") {
+          item.status = "pending";
+        }
         return item;
       });
     } catch (error) {
@@ -262,20 +268,131 @@
     return saved;
   }
 
-  function approveOrder(id) {
+  function setOrderStatus(id, status) {
     var list = readOrders().map(function (item) {
       if (item.id === id) {
-        item.status = "approved";
+        item.status = status;
       }
       return item;
     });
     writeOrders(list);
   }
 
+  function approveOrder(id) {
+    setOrderStatus(id, "approved");
+  }
+
+  function rejectOrder(id) {
+    setOrderStatus(id, "rejected");
+  }
+
+  function appointmentAt(order) {
+    var parts = String(order && order.date || "").split("-");
+    var time = String(order && order.time || "").split(":");
+    if (parts.length !== 3 || time.length < 2 || time[0] === "") {
+      return null;
+    }
+    var point = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), Number(time[0]), Number(time[1]) || 0, 0, 0);
+    return isNaN(point.getTime()) ? null : point;
+  }
+
+  function customerMayCancel(order) {
+    var point = appointmentAt(order);
+    if (!order || (order.status !== "pending" && order.status !== "approved") || !point) {
+      return false;
+    }
+    return point.getTime() - Date.now() > 7 * 60 * 60 * 1000;
+  }
+
+  function cancelOrder(id, meta) {
+    var by = meta && meta.by === "customer" ? "customer" : "admin";
+    var current = null;
+    readOrders().forEach(function (item) {
+      if (item.id === id) {
+        current = item;
+      }
+    });
+    if (!current || current.status === "cancelled") {
+      return null;
+    }
+    if (by === "customer" && !customerMayCancel(current)) {
+      return null;
+    }
+    var saved = null;
+    var list = readOrders().map(function (item) {
+      if (item.id === id) {
+        item.status = "cancelled";
+        item.cancelledAt = new Date().toISOString();
+        item.cancelledBy = by;
+        saved = item;
+      }
+      return item;
+    });
+    writeOrders(list);
+    return saved;
+  }
+
   window.VIP_ORDERS = {
     read: readOrders,
     add: addOrder,
-    approve: approveOrder
+    approve: approveOrder,
+    reject: rejectOrder,
+    cancel: cancelOrder,
+    customerMayCancel: customerMayCancel
+  };
+})();
+
+(function () {
+  "use strict";
+
+  var storageKey = "vip-admin-notices";
+
+  function readNotices() {
+    try {
+      var raw = localStorage.getItem(storageKey);
+      var list = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(list)) {
+        return [];
+      }
+      return list.filter(function (item) {
+        return item && typeof item.id === "string";
+      });
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function writeNotices(list) {
+    localStorage.setItem(storageKey, JSON.stringify(list));
+  }
+
+  window.VIP_NOTICES = {
+    read: readNotices,
+    add: function (notice) {
+      var list = readNotices();
+      list.unshift({
+        id: String(Date.now()) + "-" + Math.floor(Math.random() * 100000),
+        type: "customer-cancel",
+        orderId: notice && notice.orderId ? notice.orderId : "",
+        text: notice && notice.text ? notice.text : "הלקוח ביטל תור.",
+        createdAt: new Date().toISOString(),
+        seen: false
+      });
+      try {
+        writeNotices(list);
+      } catch (error) {
+        return null;
+      }
+      return list[0];
+    },
+    markSeen: function (id) {
+      writeNotices(readNotices().map(function (item) {
+        if (item.id === id) {
+          item.seen = true;
+        }
+        return item;
+      }));
+    }
   };
 })();
 
@@ -329,7 +446,7 @@
     }
 
     if (draft.adults + draft.children + draft.vip < 1) {
-      line("בחרו לפחות אדם אחד.");
+      line(root.id === "party-summary" ? "הזמנה החל משני אנשים." : "בחרו לפחות אדם אחד.");
       return;
     }
 
@@ -359,6 +476,9 @@
     }
 
     line("סה״כ: " + money(total));
+    if (root.id === "party-summary" && draft.adults + draft.children < 2) {
+      line("כדי להמשיך צריך לפחות שני אנשים.");
+    }
   }
 
   if (savedView && booking) {
@@ -421,7 +541,7 @@
 
     fillSummary(summary, draft);
 
-    var ready = draft.adults + draft.children > 0;
+    var ready = draft.adults + draft.children >= 2;
     continueLink.setAttribute("aria-disabled", ready ? "false" : "true");
     continueLink.tabIndex = ready ? 0 : -1;
   }
@@ -499,6 +619,18 @@
     return !!(rule && rule.status === "closed");
   }
 
+  function slotPassed(date, slot) {
+    if (!date || iso(date) !== iso(todayStart)) {
+      return false;
+    }
+    var parts = String(slot || "").split(":");
+    if (parts.length < 2 || parts[0] === "") {
+      return true;
+    }
+    var moment = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Number(parts[0]), Number(parts[1]) || 0, 0, 0);
+    return isNaN(moment.getTime()) || moment.getTime() <= Date.now();
+  }
+
   function slotsFor(date) {
     if (!date || isClosed(date) || !schedule.standing) {
       return [];
@@ -507,7 +639,9 @@
     if (!rule || rule.status !== "hours" || !rule.slots) {
       return [];
     }
-    return rule.slots.slice();
+    return rule.slots.filter(function (slot) {
+      return !slotPassed(date, slot);
+    });
   }
 
   var saved = parse(draft.date);
@@ -534,6 +668,11 @@
     }
     var slots = slotsFor(date);
     if (!slots.length) {
+      if (iso(date) === iso(todayStart)) {
+        var note = document.createElement("p");
+        note.textContent = "השעות להיום כבר עברו.";
+        times.appendChild(note);
+      }
       return;
     }
     var row = document.createElement("div");
@@ -611,7 +750,8 @@
 
     renderTimes(parse(draft.date));
     if (continueButton) {
-      var ready = !!(draft.date && draft.time);
+      var enough = booking.enoughPeople(draft);
+      var ready = !!(draft.date && draft.time && enough);
       continueButton.disabled = !ready;
       continueButton.setAttribute("aria-disabled", ready ? "false" : "true");
     }
@@ -627,170 +767,16 @@
   });
   if (continueButton) {
     continueButton.addEventListener("click", function () {
-      if (!draft.date || !draft.time) {
+      if (!draft.date || !draft.time || !booking.enoughPeople(draft)) {
+        if (!booking.enoughPeople(draft)) {
+          window.location.href = "booking.html";
+        }
         return;
       }
       booking.write(draft);
       window.location.href = "booking-details.html";
     });
   }
-  render();
-})();
-
-(function () {
-  "use strict";
-
-  var root = document.getElementById("week-days");
-  var schedule = window.VIP_SCHEDULE;
-  if (!root || !schedule) {
-    return;
-  }
-
-  var label = document.getElementById("week-label");
-  var status = document.getElementById("week-status");
-  var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
-  var today = new Date();
-  var cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - cursor.getDay());
-  var week = {};
-
-  function two(number) {
-    return number < 10 ? "0" + number : String(number);
-  }
-
-  function iso(date) {
-    return date.getFullYear() + "-" + two(date.getMonth() + 1) + "-" + two(date.getDate());
-  }
-
-  function readStore() {
-    try {
-      var raw = localStorage.getItem(schedule.storageKey);
-      var data = raw ? JSON.parse(raw) : {};
-      return data && data.weeks ? data.weeks : {};
-    } catch (error) {
-      return {};
-    }
-  }
-
-  function blankWeek() {
-    var days = {};
-    schedule.weekdays.forEach(function (day) {
-      days[day.id] = { status: "unset", start: "", end: "" };
-    });
-    return days;
-  }
-
-  function loadWeek() {
-    var stored = readStore()[iso(cursor)];
-    week = blankWeek();
-    if (!stored) {
-      return;
-    }
-    schedule.weekdays.forEach(function (day) {
-      var item = stored[day.id];
-      if (!item) {
-        return;
-      }
-      if (item.status === "closed" || item.status === "hours" || item.status === "unset") {
-        week[day.id].status = item.status;
-      }
-      week[day.id].start = typeof item.start === "string" ? item.start : "";
-      week[day.id].end = typeof item.end === "string" ? item.end : "";
-    });
-  }
-
-  function render() {
-    var end = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6);
-    label.textContent = cursor.getDate() + " ב" + months[cursor.getMonth()] + " – " + end.getDate() + " ב" + months[end.getMonth()] + " " + end.getFullYear();
-    root.textContent = "";
-    schedule.weekdays.forEach(function (day) {
-      var date = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + Number(day.id));
-      var card = document.createElement("article");
-      card.className = "avail__day";
-
-      var title = document.createElement("h2");
-      title.textContent = "יום " + day.label + " " + date.getDate() + "." + two(date.getMonth() + 1);
-      card.appendChild(title);
-
-      var modes = document.createElement("div");
-      modes.className = "avail__modes";
-      [
-        ["unset", "טרם הוגדר"],
-        ["closed", "לא פנוי"],
-        ["hours", "פנוי"]
-      ].forEach(function (mode) {
-        var button = document.createElement("button");
-        button.type = "button";
-        button.textContent = mode[1];
-        button.setAttribute("aria-pressed", week[day.id].status === mode[0] ? "true" : "false");
-        button.addEventListener("click", function () {
-          week[day.id].status = mode[0];
-          render();
-        });
-        modes.appendChild(button);
-      });
-      card.appendChild(modes);
-
-      var fields = document.createElement("div");
-      fields.className = "avail__times";
-      [["start", "שעת התחלה"], ["end", "שעת סיום"]].forEach(function (field) {
-        var wrap = document.createElement("label");
-        wrap.textContent = field[1];
-        var input = document.createElement("input");
-        input.type = "time";
-        input.value = week[day.id][field[0]];
-        input.disabled = week[day.id].status !== "hours";
-        input.addEventListener("change", function () {
-          week[day.id][field[0]] = input.value;
-        });
-        wrap.appendChild(input);
-        fields.appendChild(wrap);
-      });
-      card.appendChild(fields);
-      root.appendChild(card);
-    });
-  }
-
-  document.getElementById("week-prev").addEventListener("click", function () {
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 7);
-    loadWeek();
-    status.textContent = "";
-    render();
-  });
-  document.getElementById("week-next").addEventListener("click", function () {
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 7);
-    loadWeek();
-    status.textContent = "";
-    render();
-  });
-  document.getElementById("week-save").addEventListener("click", function () {
-    var invalid = false;
-    schedule.weekdays.forEach(function (day) {
-      var item = week[day.id];
-      if (item.status === "hours" && (!item.start || !item.end || item.end <= item.start)) {
-        invalid = true;
-      }
-    });
-    if (invalid) {
-      status.textContent = "ביום פנוי צריך שעת התחלה ושעת סיום מאוחרת ממנה.";
-      return;
-    }
-    var store = readStore();
-    store[iso(cursor)] = week;
-    try {
-      localStorage.setItem(schedule.storageKey, JSON.stringify({
-        temporary: true,
-        syncedWithBookings: false,
-        weeks: store
-      }));
-    } catch (error) {
-      status.textContent = "לא ניתן לשמור במכשיר זה.";
-      return;
-    }
-    status.textContent = "השבוע נשמר במכשיר זה בלבד. יומן ההזמנות של הלקוחות לא עודכן.";
-  });
-
-  loadWeek();
   render();
 })();
 
@@ -1037,6 +1023,10 @@
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
+    if (!booking.enoughPeople(draft)) {
+      window.location.href = "booking.html";
+      return;
+    }
     Object.keys(fields).forEach(function (name) {
       touched[name] = true;
     });
@@ -1212,6 +1202,10 @@
   var closeModal = document.getElementById("sent-close");
 
   button.addEventListener("click", function () {
+    if (!booking.enoughPeople(draft)) {
+      window.location.href = "booking.html";
+      return;
+    }
     var photo = "";
     booking.write(draft);
     try {
@@ -1361,8 +1355,8 @@
       var where = document.createElement("p");
       var service = document.createElement("p");
       card.className = "order-card";
-      status.className = "order-card__status" + (order.status === "approved" ? " is-approved" : "");
-      status.textContent = order.status === "approved" ? "מאושר" : "ממתין";
+      status.className = "order-card__status is-" + (order.status === "approved" || order.status === "rejected" || order.status === "cancelled" ? order.status : "pending");
+      status.textContent = order.status === "approved" ? "מאושר" : order.status === "rejected" ? "נדחה" : order.status === "cancelled" ? "בוטל" : "ממתין";
       when.textContent = dateLabel(order.date) + (order.time ? ", בשעה " + order.time : "");
       who.textContent = (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : "");
       where.textContent = addressOf(customer);
@@ -1378,7 +1372,24 @@
         image.alt = "תמונת הכניסה לבניין";
         card.appendChild(image);
       }
-      if (canApprove && order.status !== "approved") {
+      if (!canApprove && (order.status === "pending" || order.status === "approved")) {
+        if (orders.customerMayCancel(order)) {
+          var cancel = document.createElement("button");
+          cancel.type = "button";
+          cancel.className = "btn btn--ghost order-card__cancel";
+          cancel.textContent = "ביטול ההזמנה";
+          cancel.addEventListener("click", function () {
+            askCancel(order);
+          });
+          card.appendChild(cancel);
+        } else {
+          var lock = document.createElement("p");
+          lock.className = "orders-lock";
+          lock.textContent = order.date && order.time ? "אי אפשר לבטל החל מ־7 שעות לפני התור." : "אי אפשר לבטל בלי תאריך ושעה.";
+          card.appendChild(lock);
+        }
+      }
+      if (canApprove && order.status === "pending") {
         var approve = document.createElement("button");
         approve.type = "button";
         approve.className = "btn btn--gold order-card__approve";
@@ -1398,6 +1409,58 @@
   }
   if (requests) {
     paint(requests, true);
+  }
+
+  var cancelId = "";
+  var dialog = document.getElementById("order-cancel");
+  var dialogText = document.getElementById("order-cancel-text");
+  var feedback = document.getElementById("orders-feedback");
+  var confirmYes = document.getElementById("order-cancel-yes");
+  var confirmNo = document.getElementById("order-cancel-no");
+
+  function askCancel(order) {
+    cancelId = order.id;
+    if (dialogText) {
+      dialogText.textContent = "לבטל את ההזמנה ב" + dateLabel(order.date) + (order.time ? ", בשעה " + order.time : "") + "?";
+    }
+    if (dialog && dialog.showModal) {
+      dialog.showModal();
+    }
+  }
+
+  if (confirmYes) {
+    confirmYes.addEventListener("click", function () {
+      var saved = orders.cancel(cancelId, { by: "customer" });
+      if (!saved) {
+        if (feedback) {
+          feedback.textContent = "אי אפשר לבטל החל מ־7 שעות לפני התור.";
+        }
+      } else {
+        if (window.VIP_NOTICES) {
+          var customer = saved.customer || {};
+          window.VIP_NOTICES.add({
+            orderId: saved.id,
+            text: "הלקוח ביטל תור: " + dateLabel(saved.date) + (saved.time ? " בשעה " + saved.time : "") + (customer.fullName ? ", " + customer.fullName : "")
+          });
+        }
+        if (feedback) {
+          feedback.textContent = "ההזמנה בוטלה במכשיר זה. התראה לזאבי עדיין לא נשלחת, והיא תחובר אחר כך.";
+        }
+      }
+      cancelId = "";
+      if (dialog && dialog.close) {
+        dialog.close();
+      }
+      if (list) {
+        paint(list, false);
+      }
+    });
+  }
+  if (confirmNo && dialog) {
+    confirmNo.addEventListener("click", function () {
+      cancelId = "";
+      dialog.close();
+    });
   }
 })();
 

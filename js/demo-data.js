@@ -1,7 +1,6 @@
 /**
  * Demo catalog for the design stage.
  * These figures are not a payment and not a stored booking.
- * The VIP package has no approved price — do not invent one.
  * Replace this file later with Supabase or another backend.
  */
 window.VIP_DEMO = {
@@ -34,13 +33,6 @@ window.VIP_DEMO = {
       priceIls: 10,
       temporaryPrice: true,
       addon: true
-    },
-    {
-      id: "vip-package",
-      name: "חבילת VIP",
-      summary: "חוויית טיפוח אישית עד הבית, עם שירות מוקפד, תשומת לב לכל פרט והתאמה לסגנון שלך.",
-      priceIls: null,
-      priceOnRequest: true
     }
   ]
 };

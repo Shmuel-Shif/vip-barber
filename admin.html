@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#070707">
-  <meta name="description" content="הדגמה מקומית לניהול זמינות שבועית. לא מחובר להזמנות.">
-  <title>ניהול זמינות — זאבי הנאו - VIP</title>
+  <meta name="description" content="ניהול מקומי לזאבי הנאו. הנתונים נשמרים במכשיר זה בלבד, בלי שרת ובלי התחברות מאובטחת.">
+  <title>ניהול — זאבי הנאו - VIP</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -16,34 +16,132 @@
   <link rel="stylesheet" href="style.css">
   <script>document.documentElement.classList.add("js");</script>
 </head>
-<body>
+<body class="admin">
   <a class="skip-link" href="#content">דלג לתוכן</a>
   <header class="site-header">
     <a class="brand" href="index.html" aria-label="VIP, דף הבית">
       <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
     </a>
-    <p class="admin-mark">ניהול זמינות</p>
+    <p class="admin-mark">ניהול</p>
   </header>
   <main id="content">
-    <section class="avail" id="admin-requests" aria-labelledby="requests-title">
-      <h2 id="requests-title">בקשות תור</h2>
-      <p class="avail__note">אישור כאן מעדכן את הסטטוס למאושר במכשיר זה.</p>
-      <div id="request-list"></div>
-    </section>
-    <section class="avail" id="week-plan" aria-labelledby="avail-title">
-      <h1 id="avail-title">זמינות שבועית</h1>
-      <p class="avail__note">הדגמה מקומית בלבד. השמירה אינה מחוברת להזמנות של לקוחות.</p>
-      <div class="cal__nav">
-        <button type="button" id="week-prev">השבוע הקודם</button>
+    <nav class="admin-nav" aria-label="ניווט ניהול">
+      <button type="button" data-admin-panel="hours">שעות פעילות</button>
+      <button type="button" data-admin-panel="day">הלוז היומי שלי</button>
+      <button type="button" data-admin-panel="orders">כל ההזמנות</button>
+      <button type="button" data-admin-panel="pending">ממתינות לאישור</button>
+      <button type="button" data-admin-panel="settings">הגדרות</button>
+    </nav>
+
+    <section class="admin-panel" data-admin-section="hours" hidden aria-labelledby="hours-title">
+      <h1 id="hours-title">שעות פעילות</h1>
+      <p class="admin-note">רשימת ימי השבוע בלבד. השמירה נשארת במכשיר זה, ויומן הלקוחות לא מתעדכן.</p>
+      <div class="cal__nav admin-day-nav">
+        <button type="button" id="week-prev">שבוע קודם</button>
         <h2 id="week-label"></h2>
-        <button type="button" id="week-next">השבוע הבא</button>
+        <button type="button" id="week-next">שבוע הבא</button>
       </div>
-      <div id="week-days" class="avail__days"></div>
-      <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השבוע</button>
-      <p id="week-status" class="cal__status" role="status"></p>
+      <div id="week-days" class="admin-hours"></div>
+      <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השעות</button>
+      <p id="week-status" class="admin-feedback" role="status"></p>
     </section>
+
+    <section class="admin-panel" data-admin-section="day" hidden aria-labelledby="day-title">
+      <h1 id="day-title">הלוז היומי שלי</h1>
+      <p class="admin-note">תורים שנשמרו במכשיר זה בלבד. אין כאן הזמנות לדוגמה.</p>
+      <div class="cal__nav admin-day-nav">
+        <button type="button" id="day-prev">יום קודם</button>
+        <h2 id="day-label"></h2>
+        <button type="button" id="day-next">יום הבא</button>
+      </div>
+      <div id="day-list"></div>
+    </section>
+
+    <section class="admin-panel" data-admin-section="orders" hidden aria-labelledby="orders-title">
+      <h1 id="orders-title">כל ההזמנות</h1>
+      <p class="admin-note">הרשימה מגיעה מההזמנות שנשמרו במכשיר זה. ביטול תור מאושר דורש אישור.</p>
+      <div id="admin-notice-list"></div>
+      <div class="admin-tools">
+        <label>סטטוס
+          <select id="orders-status">
+            <option value="all">הכול</option>
+            <option value="pending">ממתין</option>
+            <option value="approved">מאושר</option>
+            <option value="rejected">נדחה</option>
+            <option value="cancelled">בוטל</option>
+          </select>
+        </label>
+        <label>תאריך
+          <input type="date" id="orders-date">
+        </label>
+        <label>חיפוש
+          <input type="search" id="orders-search" placeholder="שם או טלפון" autocomplete="off">
+        </label>
+      </div>
+      <p id="orders-feedback" class="admin-feedback" role="status"></p>
+      <div id="orders-admin-list"></div>
+    </section>
+
+    <section class="admin-panel" data-admin-section="pending" hidden aria-labelledby="pending-title">
+      <h1 id="pending-title">ממתינות לאישור</h1>
+      <p class="admin-note">רק בקשות שממתינות. אישור או דחייה נשמרים במכשיר זה, בלי התראה ללקוח.</p>
+      <p id="pending-feedback" class="admin-feedback" role="status"></p>
+      <div id="pending-list"></div>
+    </section>
+
+    <section class="admin-panel" data-admin-section="settings" hidden aria-labelledby="settings-title">
+      <h1 id="settings-title">הגדרות העסק</h1>
+      <p class="admin-note">ההגדרות נשמרות במכשיר הניהול בלבד. עמודי הלקוח ממשיכים להשתמש במחירי ההדגמה ובחלונות של חצי שעה.</p>
+      <form id="business-form">
+        <label class="admin-field">שם לתצוגה בניהול
+          <input id="biz-name" name="name" type="text" maxlength="80" autocomplete="organization" required>
+        </label>
+        <label class="admin-field">משך ברירת מחדל, בדקות
+          <input id="biz-slot" name="slot" type="number" min="15" max="180" step="5" inputmode="numeric" required>
+        </label>
+        <fieldset>
+          <legend>תספורת גברים</legend>
+          <label class="admin-field">מחיר בשקלים
+            <input data-service="mens-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
+          </label>
+          <label class="admin-field">משך בדקות
+            <input data-service="mens-haircut" data-field="minutes" type="number" min="15" max="180" step="5" inputmode="numeric" required>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>תספורת ילדים</legend>
+          <label class="admin-field">מחיר בשקלים
+            <input data-service="kids-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
+          </label>
+          <label class="admin-field">משך בדקות
+            <input data-service="kids-haircut" data-field="minutes" type="number" min="15" max="180" step="5" inputmode="numeric" required>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>סידור זקן</legend>
+          <label class="admin-field">מחיר בשקלים
+            <input data-service="beard" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
+          </label>
+          <label class="admin-field">משך בדקות
+            <input data-service="beard" data-field="minutes" type="number" min="15" max="180" step="5" inputmode="numeric" required>
+          </label>
+        </fieldset>
+        <button type="submit" class="btn btn--gold admin-save">שמירת ההגדרות</button>
+        <p id="biz-status" class="admin-feedback" role="status"></p>
+      </form>
+    </section>
+    <noscript>
+      <p class="admin-note">כדי להשתמש בניהול צריך לאפשר JavaScript. אין כאן חיבור לשרת.</p>
+    </noscript>
   </main>
+  <dialog class="admin-dialog" id="admin-confirm" aria-labelledby="admin-confirm-title">
+    <h2 id="admin-confirm-title">לבטל את התור?</h2>
+    <p id="admin-confirm-text"></p>
+    <button type="button" class="btn btn--gold" id="admin-confirm-yes">ביטול התור</button>
+    <button type="button" class="btn btn--ghost" id="admin-confirm-no">חזרה בלי ביטול</button>
+  </dialog>
   <script src="js/demo-data.js"></script>
   <script src="script.js"></script>
+  <script src="js/admin.js"></script>
 </body>
 </html>

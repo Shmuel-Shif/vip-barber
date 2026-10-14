@@ -30,8 +30,15 @@
   </header>
   <main id="content" class="page orders-page">
     <h1>ההזמנות שלי</h1>
-    <p class="orders-note">ההזמנה נשמרת במכשיר זה. הסטטוס מתחיל כממתין, ואחרי אישור של זאבי הוא הופך למאושר.</p>
+    <p class="orders-note">ההזמנה נשמרת במכשיר זה. הסטטוס מתחיל כממתין, ואחרי אישור של זאבי הוא הופך למאושר. אפשר לבטל עד 7 שעות לפני התור.</p>
+    <p id="orders-feedback" class="orders-note" role="status"></p>
     <div id="orders-list"></div>
+    <dialog class="sent-modal" id="order-cancel" aria-labelledby="order-cancel-title">
+      <h2 id="order-cancel-title">אתה בטוח?</h2>
+      <p id="order-cancel-text">לבטל את ההזמנה?</p>
+      <button type="button" class="btn btn--gold" id="order-cancel-yes">כן, לבטל</button>
+      <button type="button" class="btn btn--ghost" id="order-cancel-no">לא</button>
+    </dialog>
   </main>
   <script src="script.js"></script>
 </body>
