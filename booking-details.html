@@ -93,7 +93,7 @@
         </div>
         <div class="field">
           <label for="notes">הוראות הגעה והערות נוספות</label>
-          <textarea id="notes" name="notes" rows="4" aria-describedby="notes-error" placeholder="לדוגמה: השער השחור מימין לחניה"></textarea>
+          <textarea id="notes" name="notes" rows="2" aria-describedby="notes-error" placeholder="לדוגמה: השער השחור מימין לחניה"></textarea>
           <small id="notes-error" class="field__error"></small>
         </div>
       </fieldset>
@@ -112,12 +112,6 @@
         </div>
         <button type="button" class="btn btn--ghost" id="photo-remove" hidden>הסרת תמונה</button>
         <p id="photo-status" class="details__hint" role="status"></p>
-      </section>
-
-      <section class="notice" aria-labelledby="notice-title">
-        <h2 id="notice-title">ההזמנה ממתינה לאישור</h2>
-        <p>לאחר שליחת הבקשה, זאבי יעבור על פרטי ההזמנה ויאשר או ידחה אותה. תקבלו התראה באפליקציית VIP כאשר סטטוס ההזמנה יתעדכן, ותוכלו לצפות בפרטי ההזמנה ולעקוב אחר מצבה בכל עת בעמוד 'ההזמנות שלי'.</p>
-        <p>חשוב לדעת: בחירת התאריך והשעה אינה מהווה אישור סופי לתור. התור ייחשב מאושר רק לאחר אישור מפורש של זאבי.</p>
       </section>
 
       <section class="pay-panel" aria-labelledby="pay-title">
@@ -142,6 +136,11 @@
 
       <p class="details__hint">כדי להמשיך יש למלא את שדות החובה ולבחור איך משלמים.</p>
       <button type="submit" class="btn btn--gold details__continue" id="details-continue" disabled>המשך לסיכום ההזמנה</button>
+      <dialog class="sent-modal" id="approval-modal">
+        <h2>שימו לב</h2>
+        <p>לאחר שליחת הבקשה, זאבי יעבור על פרטי ההזמנה ויאשר או ידחה אותה. תקבלו התראה באפליקציית VIP כאשר סטטוס ההזמנה יתעדכן, ותוכלו לצפות בפרטי ההזמנה ולעקוב אחר מצבה בכל עת בעמוד 'ההזמנות שלי'.</p>
+        <button type="button" class="btn btn--gold" id="approval-continue">המשך לסיכום ההזמנה</button>
+      </dialog>
       <noscript>
         <p class="services-fallback">כדי למלא את הפרטים צריך לאפשר JavaScript. אין כאן שליחה לשרת.</p>
       </noscript>

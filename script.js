@@ -372,14 +372,11 @@
   var draft = booking.read();
   var adultsCount = document.getElementById("adults-count");
   var childrenCount = document.getElementById("children-count");
-  var vipCount = document.getElementById("vip-count");
   var beardsCount = document.getElementById("beards-count");
   var adultsMinus = document.getElementById("adults-minus");
   var adultsPlus = document.getElementById("adults-plus");
   var childrenMinus = document.getElementById("children-minus");
   var childrenPlus = document.getElementById("children-plus");
-  var vipMinus = document.getElementById("vip-minus");
-  var vipPlus = document.getElementById("vip-plus");
   var beardsMinus = document.getElementById("beards-minus");
   var beardsPlus = document.getElementById("beards-plus");
   var beardStep = document.getElementById("beard-step");
@@ -404,6 +401,7 @@
   }
 
   function paint() {
+    draft.vip = 0;
     if (draft.beards > draft.adults) {
       draft.beards = draft.adults;
     }
@@ -412,11 +410,9 @@
 
     adultsCount.textContent = String(draft.adults);
     childrenCount.textContent = String(draft.children);
-    vipCount.textContent = String(draft.vip);
     beardsCount.textContent = String(draft.beards);
     adultsMinus.disabled = draft.adults < 1;
     childrenMinus.disabled = draft.children < 1;
-    vipMinus.disabled = draft.vip < 1;
     beardsMinus.disabled = draft.beards < 1;
     beardsPlus.disabled = draft.adults < 1 || draft.beards >= draft.adults;
     if (beardStep) {
@@ -425,7 +421,7 @@
 
     fillSummary(summary, draft);
 
-    var ready = draft.adults + draft.children + draft.vip > 0;
+    var ready = draft.adults + draft.children > 0;
     continueLink.setAttribute("aria-disabled", ready ? "false" : "true");
     continueLink.tabIndex = ready ? 0 : -1;
   }
@@ -442,8 +438,6 @@
   adultsPlus.addEventListener("click", function () { change("adults", 1); });
   childrenMinus.addEventListener("click", function () { change("children", -1); });
   childrenPlus.addEventListener("click", function () { change("children", 1); });
-  vipMinus.addEventListener("click", function () { change("vip", -1); });
-  vipPlus.addEventListener("click", function () { change("vip", 1); });
   beardsMinus.addEventListener("click", function () { change("beards", -1); });
   beardsPlus.addEventListener("click", function () { change("beards", 1); });
 
@@ -1051,6 +1045,11 @@
     if (!ready(readFields())) {
       return;
     }
+    var approvalModal = document.getElementById("approval-modal");
+    if (approvalModal && approvalModal.showModal && !approvalModal.open) {
+      approvalModal.showModal();
+      return;
+    }
     draft.submitted = readFields();
     draft.customer = {
       fullName: "",
@@ -1081,6 +1080,13 @@
     window.location.href = "booking-summary.html";
   });
 
+  var approvalContinue = document.getElementById("approval-continue");
+  if (approvalContinue) {
+    approvalContinue.addEventListener("click", function () {
+      form.requestSubmit();
+    });
+  }
+
   paint();
 })();
 
@@ -1100,6 +1106,8 @@
   var who = document.getElementById("summary-customer");
   var address = document.getElementById("summary-address");
   var photo = document.getElementById("summary-photo");
+  var paymentSummary = document.getElementById("summary-payment");
+  var paymentNames = { paybox: "PayBox", cash: "מזומן", transfer: "העברה בנקאית" };
   var services = window.VIP_DEMO && window.VIP_DEMO.services ? window.VIP_DEMO.services : [];
 
   function line(parent, text) {
@@ -1169,6 +1177,9 @@
   }
   if (customer.notes) {
     line(address, "הערות: " + customer.notes);
+  }
+  if (paymentSummary) {
+    line(paymentSummary, paymentNames[customer.payment] || "לא נבחר אמצעי תשלום.");
   }
   var storedPhoto = "";
   try {

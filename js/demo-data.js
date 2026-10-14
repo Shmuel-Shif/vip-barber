@@ -17,7 +17,7 @@ window.VIP_DEMO = {
       id: "mens-haircut",
       name: "תספורת גברים",
       summary: "תספורת בהתאמה אישית.",
-      priceIls: 65,
+      priceIls: 70,
       temporaryPrice: true
     },
     {
@@ -31,7 +31,7 @@ window.VIP_DEMO = {
       id: "beard",
       name: "סידור זקן",
       summary: "תוספת לביקור, לא כרטיס שירות נפרד.",
-      priceIls: 15,
+      priceIls: 10,
       temporaryPrice: true,
       addon: true
     },

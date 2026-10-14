@@ -1180,13 +1180,20 @@ body.nav-open {
   margin-top: 0.85rem;
 }
 
+body:has(.party) {
+  height: 100dvh;
+  overflow: hidden;
+}
+
 .party {
   display: flex;
   flex-direction: column;
   width: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
   margin: 0;
-  padding: calc(var(--header-height) + var(--step-bar-height) + env(safe-area-inset-top) + 0.8rem) 1.15rem calc(1.2rem + env(safe-area-inset-bottom));
+  overflow: hidden;
+  padding: calc(var(--header-height) + var(--step-bar-height) + env(safe-area-inset-top) + 0.25rem) 1rem calc(0.4rem + env(safe-area-inset-bottom));
   text-align: center;
 }
 
@@ -1200,17 +1207,17 @@ body.nav-open {
 .party h1 {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: clamp(1.7rem, 4.8vw, 2.5rem);
+  font-size: clamp(1.35rem, 4.2vw, 2rem);
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .party__lead,
 .party__service {
-  margin: 0.55rem 0 0;
+  margin: 0.25rem 0 0;
   color: var(--ivory-soft);
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: 0.84rem;
+  line-height: 1.3;
 }
 
 .party__service {
@@ -1219,9 +1226,9 @@ body.nav-open {
 
 .party__rows {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.15rem;
   width: 100%;
-  margin-top: 1.35rem;
+  margin-top: 0.45rem;
 }
 
 .party__row {
@@ -1230,7 +1237,7 @@ body.nav-open {
   justify-content: space-between;
   gap: 0.75rem;
   width: 100%;
-  padding: 1rem 0.15rem;
+  padding: 0.35rem 0.1rem;
   border: 0;
   border-bottom: 1px solid rgba(196, 164, 106, 0.4);
   background: transparent;
@@ -1317,8 +1324,8 @@ body.nav-open {
 
 .party__summary {
   width: 100%;
-  margin-top: 1.25rem;
-  padding: 0.9rem 0;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0;
   border: 0;
   border-top: 1px solid rgba(196, 164, 106, 0.4);
   text-align: right;
@@ -1338,7 +1345,9 @@ body.nav-open {
 
 .party__continue {
   width: 100%;
+  min-height: 2.35rem;
   margin-top: auto;
+  padding: 0.4rem 1rem;
 }
 
 .party__continue[aria-disabled="true"] {
@@ -1661,10 +1670,45 @@ body.date-screen .btn--gold::after {
 }
 
 .details h1 {
-  margin: 0.85rem 0 0;
-  font-size: clamp(1.7rem, 4.6vw, 2.35rem);
-  line-height: 1.2;
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.45rem, 4.2vw, 2.1rem);
+  line-height: 1.15;
   text-align: center;
+}
+
+#customer-form .details__group,
+#customer-form .photo-panel,
+#customer-form .pay-panel,
+#customer-form fieldset {
+  margin-top: 0.7rem;
+  padding-top: 0.55rem;
+}
+
+#customer-form .field {
+  gap: 0.2rem;
+  margin-top: 0.4rem;
+}
+
+#customer-form .field input,
+#customer-form .field textarea {
+  min-height: 2.35rem;
+  padding: 0.4rem 0.7rem;
+}
+
+#customer-form .field textarea {
+  min-height: 3.6rem;
+}
+
+#customer-form .field__error {
+  min-height: 0.7em;
+}
+
+#customer-form .details__choices {
+  margin-top: 0.45rem;
+}
+
+#customer-form .details__hint {
+  margin-top: 0.55rem;
 }
 
 .step-progress {
