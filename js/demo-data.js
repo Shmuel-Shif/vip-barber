@@ -271,11 +271,17 @@ window.VIP_SCHEDULE = {
     return slots;
   }
 
+  function bookingUntil(from) {
+    var start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    var extra = start.getDay() === 6 ? 7 : 6 - start.getDay();
+    return new Date(start.getFullYear(), start.getMonth(), start.getDate() + extra);
+  }
+
   function slotOpen(dateValue, time) {
     var date = parse(dateValue);
     var today = new Date();
     var start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    if (!date || !time || date < start) {
+    if (!date || !time || date < start || date > bookingUntil(start)) {
       return false;
     }
     return openSlots(date).indexOf(time) !== -1;
@@ -289,4 +295,5 @@ window.VIP_SCHEDULE = {
   schedule.slotsBetween = slotsBetween;
   schedule.openSlots = openSlots;
   schedule.slotOpen = slotOpen;
+  schedule.bookingUntil = bookingUntil;
 })();

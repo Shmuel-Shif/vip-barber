@@ -632,8 +632,17 @@
     return schedule.openSlots(date);
   }
 
+  function bookingUntil(from) {
+    if (schedule.bookingUntil) {
+      return schedule.bookingUntil(from);
+    }
+    var extra = from.getDay() === 6 ? 7 : 6 - from.getDay();
+    return new Date(from.getFullYear(), from.getMonth(), from.getDate() + extra);
+  }
+
+  var bookUntil = bookingUntil(todayStart);
   var saved = parse(draft.date);
-  if (!saved || saved < todayStart || isClosed(saved)) {
+  if (!saved || saved < todayStart || saved > bookUntil || isClosed(saved)) {
     draft.date = "";
     draft.time = "";
     booking.write(draft);
@@ -688,8 +697,16 @@
   function render() {
     var year = view.getFullYear();
     var month = view.getMonth();
+    var hint = document.querySelector(".cal__hint");
     label.textContent = months[month] + " " + year;
     prev.disabled = year === todayStart.getFullYear() && month === todayStart.getMonth();
+    next.disabled = new Date(year, month + 1, 1) > bookUntil;
+    if (hint) {
+      var untilText = bookUntil.getDate() + " ב" + months[bookUntil.getMonth()];
+      hint.textContent = todayStart.getDay() === 6
+        ? "היום שבת, ואפשר להזמין לשבוע הבא עד " + untilText + ". אין סנכרון בין מכשירים."
+        : "אפשר להזמין רק עד " + untilText + ". בשבת ייפתח השבוע הבא, מיום ראשון והלאה. אין סנכרון בין מכשירים.";
+    }
     grid.textContent = "";
 
     var first = new Date(year, month, 1);
@@ -708,10 +725,11 @@
       button.type = "button";
       button.className = "cal__day";
       button.textContent = String(index);
-      button.setAttribute("aria-label", index + " ב" + months[month] + " " + year);
-      if (date < todayStart || isClosed(date)) {
+      var beyondWeek = date > bookUntil;
+      button.setAttribute("aria-label", index + " ב" + months[month] + " " + year + (beyondWeek ? ", עדיין לא נפתח להזמנה" : ""));
+      if (date < todayStart || beyondWeek || isClosed(date)) {
         button.disabled = true;
-        if (isClosed(date)) {
+        if (!beyondWeek && isClosed(date)) {
           button.classList.add("is-closed");
         }
       }
@@ -759,7 +777,7 @@
   });
   if (continueButton) {
     continueButton.addEventListener("click", function () {
-      if (!draft.date || !draft.time || !booking.enoughPeople(draft)) {
+      if (!draft.date || !draft.time || !booking.enoughPeople(draft) || parse(draft.date) > bookUntil) {
         if (!booking.enoughPeople(draft)) {
           window.location.href = "booking.html";
         }
