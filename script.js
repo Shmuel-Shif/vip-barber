@@ -1616,16 +1616,6 @@
     return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: fullscreen)").matches || window.navigator.standalone === true;
   }
 
-  function installFinished() {
-    var choice = "";
-    try {
-      choice = localStorage.getItem("vip-install-choice") || "";
-    } catch (error) {
-      choice = "";
-    }
-    return standalone() || choice === "installed";
-  }
-
   function permission() {
     if (!("Notification" in window)) {
       return "unsupported";
@@ -1684,6 +1674,9 @@
   }
 
   function offerAfterInstall() {
+    if (!standalone()) {
+      return;
+    }
     if (install && !install.hidden) {
       return;
     }
@@ -1730,41 +1723,8 @@
     });
   }
 
-  if (!install || installFinished()) {
-    offerAfterInstall();
+  if (!standalone()) {
     return;
   }
-
-  var sawInstall = false;
-  var observer = new MutationObserver(function () {
-    if (!install.hidden) {
-      sawInstall = true;
-      return;
-    }
-    if (sawInstall) {
-      offerAfterInstall();
-    }
-  });
-  observer.observe(install, { attributes: true, attributeFilter: ["hidden"] });
-
-  var waits = 0;
-  var timer = window.setInterval(function () {
-    waits += 1;
-    if (!install.hidden) {
-      sawInstall = true;
-    }
-    if (installFinished() && install.hidden) {
-      window.clearInterval(timer);
-      offerAfterInstall();
-      return;
-    }
-    if (sawInstall && install.hidden) {
-      window.clearInterval(timer);
-      offerAfterInstall();
-      return;
-    }
-    if (waits > 30) {
-      window.clearInterval(timer);
-    }
-  }, 100);
+  offerAfterInstall();
 })();
