@@ -32,10 +32,12 @@
 
   Promise.race([Promise.all([fontsReady, imageReady]), timeout]).then(reveal);
 
-  if ("serviceWorker" in navigator && window.isSecureContext) {
+  if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
-      navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(function () {
-        return undefined;
+      navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        registrations.forEach(function (registration) {
+          registration.unregister();
+        });
       });
     });
   }

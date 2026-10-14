@@ -1,86 +1,30 @@
-var CACHE_NAME = "vip-shell-v97";
-var SHELL = [
-  "./index.html",
-  "./booking.html",
-  "./booking-next.html",
-  "./booking-details.html",
-  "./booking-summary.html",
-  "./booking-wait.html",
-  "./admin.html",
-  "./orders.html",
-  "./style.css",
-  "./script.js",
-  "./js/demo-data.js",
-  "./js/supabase-client.js",
-  "./js/admin.js",
-  "./manifest.webmanifest",
-  "./assets/tools.jpg",
-  "./assets/logo/logo.png",
-  "./assets/icon-192.png",
-  "./assets/icon-512.png",
-  "./assets/icon-maskable-512.png"
-];
-
+/*
+ * The previous worker stayed in control after refresh and kept serving
+ * saved pages that do not load js/supabase-client.js.
+ * Activate once, delete those saved pages, drop the registration, and
+ * reload the open tabs so the local server answers the next request.
+ */
 self.addEventListener("install", function (event) {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(SHELL);
-    }).then(function () {
-      return self.skipWaiting();
-    })
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", function (event) {
   event.waitUntil(
     caches.keys().then(function (keys) {
-      return Promise.all(
-        keys.filter(function (key) {
-          return key !== CACHE_NAME;
-        }).map(function (key) {
-          return caches.delete(key);
-        })
-      );
+      return Promise.all(keys.map(function (key) {
+        return caches.delete(key);
+      }));
     }).then(function () {
-      return self.clients.claim();
-    })
-  );
-});
-
-self.addEventListener("fetch", function (event) {
-  var request = event.request;
-  if (request.method !== "GET") {
-    return;
-  }
-
-  var url = new URL(request.url);
-  if (url.origin !== self.location.origin) {
-    return;
-  }
-
-  event.respondWith(
-    fetch(request.url, {
-      cache: "no-store",
-      credentials: "same-origin",
-      redirect: "follow"
-    }).then(function (response) {
-      if (response && response.ok && response.type === "basic" && !url.pathname.endsWith("/sw.js")) {
-        var copy = response.clone();
-        caches.open(CACHE_NAME).then(function (cache) {
-          return cache.put(request.url, copy);
-        });
-      }
-      return response;
-    }).catch(function () {
-      return caches.match(request).then(function (cached) {
-        if (cached) {
-          return cached;
+      return self.registration.unregister();
+    }).then(function () {
+      return self.clients.matchAll({ type: "window" });
+    }).then(function (windowClients) {
+      return Promise.all(windowClients.map(function (client) {
+        if (client.url && client.navigate) {
+          return client.navigate(client.url);
         }
-        if (request.mode === "navigate") {
-          return caches.match("./index.html");
-        }
-        return Response.error();
-      });
+        return undefined;
+      }));
     })
   );
 });
