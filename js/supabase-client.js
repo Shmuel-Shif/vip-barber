@@ -117,16 +117,21 @@
   }
 
   function createClient() {
+    var authOptions;
     if (!window.supabase || typeof window.supabase.createClient !== "function") {
       throw new Error("Supabase library is not on the page.");
     }
+    authOptions = {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      storage: window.localStorage
+    };
+    if (document.body && document.body.classList.contains("admin")) {
+      authOptions.storageKey = "sb-riyiypsuwlnpsycobnpw-admin-auth";
+    }
     return window.supabase.createClient(url, publishableKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: false,
-        storage: window.localStorage
-      }
+      auth: authOptions
     });
   }
 
@@ -282,9 +287,6 @@
     }
     if (text.indexOf("more than 7") !== -1 || text.indexOf("7 hours") !== -1) {
       return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
-    }
-    if (text.indexOf("argument of") !== -1 || text.indexOf("timestamp") !== -1 || text.indexOf("syntax error") !== -1) {
-      return "לא ניתן לטעון את זמני ההזמנה. נסו שוב בעוד רגע.";
     }
     return raw;
   }

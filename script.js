@@ -1047,14 +1047,11 @@
       grid.appendChild(button);
     }
 
-    if (!schedule.unavailable && !schedule.loadError && draft.date && draft.time && slotsFor(parse(draft.date)).indexOf(draft.time) === -1) {
+    if (!holdBusy && !schedule.unavailable && !schedule.loadError && draft.date && draft.time && slotsFor(parse(draft.date)).indexOf(draft.time) === -1) {
       var owned = holdReady && holdReady.date === draft.date && holdReady.time === draft.time;
       if (!owned) {
         draft.time = "";
         save();
-        if (holdReady || holdBusy) {
-          dropHold();
-        }
       }
     }
     renderTimes(parse(draft.date));
@@ -1098,20 +1095,113 @@
     }
   }
 
+  var busyGeneration = 0;
+  var busyPoll = 0;
+  var busyInFlight = false;
+  var busyAgain = false;
+
+  function selectedStillFree() {
+    if (!draft.date || !draft.time) {
+      return true;
+    }
+    if (holdReady && holdReady.date === draft.date && holdReady.time === draft.time) {
+      return true;
+    }
+    return slotsFor(parse(draft.date)).indexOf(draft.time) !== -1;
+  }
+
+  function applyBusyRows(rows) {
+    var own = holdReady && holdReady.date === draft.date && holdReady.time === draft.time ? holdReady : null;
+    schedule.applyRemote(loadedSchedule, own ? withoutOwnHold(rows, own) : rows);
+    if (!holdBusy && draft.time && !selectedStillFree()) {
+      draft.time = "";
+      save();
+      sayCal("השעה הזו כבר אינה זמינה.");
+    }
+    render();
+  }
+
   function refreshBusy() {
     if (!loadedSchedule || !window.VIP_SUPABASE || !window.VIP_SUPABASE.fetchBusy) {
       render();
       return;
     }
+    if (busyInFlight) {
+      busyAgain = true;
+      return;
+    }
+    busyInFlight = true;
+    busyGeneration += 1;
+    var generation = busyGeneration;
     window.VIP_SUPABASE.fetchBusy(iso(todayStart), iso(bookUntil)).then(function (busy) {
-      if (busy && !busy.error) {
-        schedule.applyRemote(loadedSchedule, holdReady ? withoutOwnHold(busy.rows, holdReady) : busy.rows);
+      var again;
+      if (generation !== busyGeneration) {
+        return;
       }
-      render();
+      busyInFlight = false;
+      again = busyAgain;
+      busyAgain = false;
+      if (document.hidden) {
+        return;
+      }
+      if (busy && !busy.error) {
+        applyBusyRows(busy.rows || []);
+      } else {
+        render();
+      }
+      if (again && !document.hidden) {
+        refreshBusy();
+      }
     }).catch(function () {
-      render();
+      var again;
+      if (generation !== busyGeneration) {
+        return;
+      }
+      busyInFlight = false;
+      again = busyAgain;
+      busyAgain = false;
+      if (!document.hidden) {
+        render();
+      }
+      if (again && !document.hidden) {
+        refreshBusy();
+      }
     });
   }
+
+  function startBusyPoll() {
+    if (busyPoll || !loadedSchedule) {
+      return;
+    }
+    busyPoll = window.setInterval(function () {
+      if (document.hidden) {
+        return;
+      }
+      refreshBusy();
+    }, 5000);
+  }
+
+  function stopBusyPoll() {
+    busyGeneration += 1;
+    busyInFlight = false;
+    busyAgain = false;
+    if (busyPoll) {
+      window.clearInterval(busyPoll);
+      busyPoll = 0;
+    }
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      stopBusyPoll();
+      return;
+    }
+    if (loadedSchedule) {
+      startBusyPoll();
+      refreshBusy();
+    }
+  });
+  window.addEventListener("pagehide", stopBusyPoll);
 
   var holdGeneration = 0;
   var holdChain = Promise.resolve();
@@ -1138,9 +1228,19 @@
     });
   }
 
-  function bookingWindowOpen() {
+  function bookingWindowLeft() {
     var left = window.VIP_HOLD_UI && window.VIP_HOLD_UI.remaining ? window.VIP_HOLD_UI.remaining() : null;
+    return typeof left === "number" ? left : null;
+  }
+
+  function bookingWindowOpen() {
+    var left = bookingWindowLeft();
     return left !== null && left > 0;
+  }
+
+  function bookingWindowEnded() {
+    var left = bookingWindowLeft();
+    return left !== null && left <= 0;
   }
 
   function bookingWindowNote() {
@@ -1269,12 +1369,14 @@
       render();
       return;
     }
-    if (people <= 5 && window.VIP_HOLD_UI && window.VIP_HOLD_UI.remaining && window.VIP_HOLD_UI.remaining() <= 0) {
+    if (people <= 5 && bookingWindowEnded()) {
       endExpiredWindow();
       return;
     }
     if (people <= 5 && !bookingWindowOpen()) {
-      sayCal(bookingWindowNote());
+      if (bookingWindowLeft() !== null) {
+        sayCal(bookingWindowNote());
+      }
       render();
       return;
     }
@@ -1445,12 +1547,14 @@
         window.location.href = "booking-details.html";
         return;
       }
-      if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.remaining && window.VIP_HOLD_UI.remaining() <= 0) {
+      if (bookingWindowEnded()) {
         endExpiredWindow();
         return;
       }
       if (!bookingWindowOpen()) {
-        sayCal(bookingWindowNote());
+        if (bookingWindowLeft() !== null) {
+          sayCal(bookingWindowNote());
+        }
         return;
       }
       if (holdBusy || !holdReady || holdReady.date !== draft.date || holdReady.time !== draft.time) {
@@ -1467,7 +1571,7 @@
           holdReady = null;
           holdBusy = false;
           clearHoldToken();
-          if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.remaining && window.VIP_HOLD_UI.remaining() <= 0) {
+          if (bookingWindowEnded()) {
             endExpiredWindow();
           } else {
             sayCal(result && result.error ? result.error : "השמירה על השעה פגה. בחרו שעה מחדש.");
@@ -1553,6 +1657,7 @@
         sayCal("לחצו על השעה כדי לשמור אותה.");
       }
       render();
+      startBusyPoll();
     }).catch(function () {
       failSchedule("לא ניתן לטעון את השעות מהשרת.");
     });
@@ -2808,14 +2913,8 @@
   } else {
     header.insertBefore(userLabel, header.firstChild);
   }
-  var adminLink = document.createElement("a");
   var authGroup = document.createElement("div");
-  adminLink.className = "header-auth header-admin-link";
-  adminLink.href = "admin.html";
-  adminLink.textContent = "ניהול";
-  adminLink.hidden = true;
   authGroup.className = "header-auth-group";
-  authGroup.appendChild(adminLink);
   authGroup.appendChild(authButton);
   if (menu) {
     menu.insertAdjacentElement("beforebegin", authGroup);
@@ -2925,7 +3024,6 @@
     activeSession = session && session.user ? session : null;
     window.VIP_ADMIN_CUSTOMER = admin;
     document.body.classList.toggle("admin-as-customer", admin);
-    adminLink.hidden = !admin;
     adminNote.hidden = !admin;
     if (admin) {
       userLabel.hidden = false;
@@ -3119,13 +3217,11 @@
       if (!session || !session.user) {
         return;
       }
-      if (event === "TOKEN_REFRESHED") {
-        if (window.VIP_ADMIN_CUSTOMER) {
-          paint(session, { role: "admin" });
-        }
+      if (event === "TOKEN_REFRESHED" && activeSession && activeSession.user && session.user.id === activeSession.user.id) {
+        activeSession = session;
         return;
       }
-      if ((event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "USER_UPDATED") && auth.profile) {
+      if ((event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "USER_UPDATED" || event === "TOKEN_REFRESHED") && auth.profile) {
         accountGeneration += 1;
         generation = accountGeneration;
         auth.profile().then(function (loaded) {
