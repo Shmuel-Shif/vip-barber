@@ -632,7 +632,7 @@
     }
 
     if (!pricesReady) {
-      line(data.priceError || "טוענים את המחירים מהשרת.");
+      line(data.priceError || "טוען מחירים…");
       return;
     }
 
@@ -681,7 +681,7 @@
       return;
     }
     if (!window.VIP_SUPABASE || !window.VIP_SUPABASE.fetchCatalog) {
-      data.priceError = "לא ניתן לטעון את המחירים מהשרת.";
+      data.priceError = "לא הצלחנו לטעון את המחירים. נסו שוב בעוד רגע.";
       if (data.onUpdate) {
         data.onUpdate();
       }
@@ -689,7 +689,7 @@
     }
     window.VIP_SUPABASE.fetchCatalog().then(function (result) {
       if (!result || result.error || !data.applyServer || !result.rows || !result.rows.length) {
-        data.priceError = result && result.error ? result.error : "לא ניתן לטעון את המחירים מהשרת.";
+        data.priceError = result && result.error ? result.error : "לא הצלחנו לטעון את המחירים. נסו שוב בעוד רגע.";
         if (data.onUpdate) {
           data.onUpdate();
         }
@@ -697,7 +697,7 @@
       }
       data.applyServer(result.rows);
     }).catch(function () {
-      data.priceError = "לא ניתן לטעון את המחירים מהשרת.";
+      data.priceError = "לא הצלחנו לטעון את המחירים. נסו שוב בעוד רגע.";
       if (data.onUpdate) {
         data.onUpdate();
       }
@@ -754,7 +754,7 @@
     }
     if (!pricesReady) {
       if (adultRate) {
-        adultRate.textContent = "טוענים את המחירים מהשרת.";
+        adultRate.textContent = "טוען מחירים…";
       }
       if (childRate) {
         childRate.textContent = "";
@@ -988,12 +988,8 @@
     prev.disabled = year === todayStart.getFullYear() && month === todayStart.getMonth();
     next.disabled = new Date(year, month + 1, 1) > bookUntil;
     if (hint) {
-      var untilText = bookUntil.getDate() + " ב" + months[bookUntil.getMonth()];
-      if (schedule.loadError) {
-        hint.textContent = schedule.loadError;
-      } else {
-        hint.textContent = "אפשר להזמין את השבוע הנוכחי ואת השבוע הבא, עד " + untilText + ". ביום ראשון החלון מתקדם.";
-      }
+      hint.hidden = !schedule.loadError;
+      hint.textContent = schedule.loadError || "";
     }
     grid.textContent = "";
 
@@ -1116,7 +1112,7 @@
     if (!holdBusy && draft.time && !selectedStillFree()) {
       draft.time = "";
       save();
-      sayCal("השעה הזו כבר אינה זמינה.");
+      sayCal("השעה הזו כבר אינה זמינה. בחרו שעה אחרת.");
     }
     render();
   }
@@ -1246,9 +1242,9 @@
   function bookingWindowNote() {
     var left = window.VIP_HOLD_UI && window.VIP_HOLD_UI.remaining ? window.VIP_HOLD_UI.remaining() : null;
     if (left !== null && left <= 0) {
-      return "חלון ההזמנה של 10 הדקות הסתיים.";
+      return "עברו 10 הדקות להזמנה. בחרו שעה מחדש.";
     }
-    return "בודקים את זמן ההזמנה.";
+    return "בודק את הזמן…";
   }
 
   function endExpiredWindow() {
@@ -1335,7 +1331,7 @@
       if (armed) {
         restoreWindowArm();
       }
-      sayCal("לא ניתן להתחיל את זמן ההזמנה.");
+      sayCal("לא הצלחנו להתחיל את ההזמנה. נסו שוב בעוד רגע.");
     });
   }
 
@@ -1393,7 +1389,7 @@
     holdBusy = true;
     holdTarget = target;
     clearHoldToken();
-    sayCal("שומרים את השעה...");
+    sayCal("");
     render();
     holdChain = holdChain.then(function () {
       var client = window.VIP_SUPABASE;
@@ -1401,7 +1397,7 @@
         return null;
       }
       if (!client || !client.holdSlot || !client.session) {
-        return { error: "החיבור לשרת לא נטען בעמוד." };
+        return { error: "אין חיבור כרגע. נסו שוב בעוד רגע." };
       }
       return client.session().then(function (result) {
         if (generation !== holdGeneration) {
@@ -1558,11 +1554,11 @@
         return;
       }
       if (holdBusy || !holdReady || holdReady.date !== draft.date || holdReady.time !== draft.time) {
-        sayCal(holdBusy ? "שומרים את השעה..." : "בחרו שעה פנויה כדי לשמור אותה.");
+        sayCal(holdBusy ? "" : "בחרו שעה פנויה כדי לשמור אותה.");
         return;
       }
       if (!client || !client.currentHold) {
-        sayCal("החיבור לשרת לא נטען בעמוד.");
+        sayCal("אין חיבור כרגע. נסו שוב בעוד רגע.");
         return;
       }
       continueButton.disabled = true;
@@ -1574,14 +1570,14 @@
           if (bookingWindowEnded()) {
             endExpiredWindow();
           } else {
-            sayCal(result && result.error ? result.error : "השמירה על השעה פגה. בחרו שעה מחדש.");
+            sayCal(result && result.error ? result.error : "הזמן לשמירת השעה הסתיים. בחרו שעה מחדש.");
           }
           render();
           return;
         }
         window.location.href = "booking-details.html";
       }).catch(function () {
-        sayCal("לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.");
+        sayCal("לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.");
         render();
       });
     });
@@ -1596,13 +1592,13 @@
   if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && window.VIP_SUPABASE.fetchCatalog && schedule.applyRemote) {
     schedule.fitVisit = false;
     schedule.unavailable = true;
-    schedule.loadError = "טוענים את השעות מהשרת.";
+    schedule.loadError = "טוען שעות פנויות…";
   }
   render();
   if (window.location.search.indexOf("hold=expired") !== -1) {
-    sayCal("השמירה על השעה פגה. בחרו שעה מחדש.");
+    sayCal("הזמן לשמירת השעה הסתיים. בחרו שעה מחדש.");
   } else if (window.location.search.indexOf("release=1") !== -1) {
-    sayCal("השמירה שוחררה. בחרו שעה מחדש.");
+    sayCal("השעה כבר לא שמורה. בחרו שעה מחדש.");
   }
   if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && window.VIP_SUPABASE.fetchCatalog && schedule.applyRemote) {
     var restoreGeneration = holdGeneration;
@@ -1623,20 +1619,20 @@
       var catalog = loaded[1];
       var busy = loaded[2];
       if (!result || result.error || !result.schedule || !result.schedule.weekly || !result.schedule.weekly.length) {
-        failSchedule(result && result.error ? result.error : "לא ניתן לטעון את השעות מהשרת.");
+        failSchedule(result && result.error ? result.error : "לא הצלחנו לטעון את השעות הפנויות. נסו שוב בעוד רגע.");
         return;
       }
       if (!catalog || catalog.error || !window.VIP_DEMO || !window.VIP_DEMO.applyServer || !catalog.rows || !catalog.rows.length) {
-        failSchedule(catalog && catalog.error ? catalog.error : "לא ניתן לטעון את המחירים מהשרת.");
+        failSchedule(catalog && catalog.error ? catalog.error : "לא הצלחנו לטעון את המחירים. נסו שוב בעוד רגע.");
         return;
       }
       if (!busy || busy.error) {
-        failSchedule(busy && busy.error ? busy.error : "לא ניתן לטעון את התורים התפוסים.");
+        failSchedule(busy && busy.error ? busy.error : "לא הצלחנו לטעון את השעות התפוסות. נסו שוב בעוד רגע.");
         return;
       }
       window.VIP_DEMO.applyServer(catalog.rows);
       if (typeof result.schedule.serviceMinutes !== "number" || typeof result.schedule.travelMinutes !== "number") {
-        failSchedule("לא ניתן לטעון את משך השירות מהשרת.");
+        failSchedule("לא הצלחנו לטעון את משך השירות. נסו שוב בעוד רגע.");
         return;
       }
       schedule.fitVisit = true;
@@ -1659,7 +1655,7 @@
       render();
       startBusyPoll();
     }).catch(function () {
-      failSchedule("לא ניתן לטעון את השעות מהשרת.");
+      failSchedule("לא הצלחנו לטעון את השעות הפנויות. נסו שוב בעוד רגע.");
     });
   }
   syncBookingWindow();
@@ -1842,7 +1838,7 @@
         canvas.height = Math.max(1, Math.round(image.height * scale));
         var context = canvas.getContext("2d");
         if (!context) {
-          photoStatus.textContent = "לא ניתן להכין תצוגה מקדימה בדפדפן זה.";
+          photoStatus.textContent = "לא ניתן להציג את התמונה. נסו תמונה אחרת.";
           return;
         }
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
@@ -1850,10 +1846,10 @@
         try {
           sessionStorage.setItem(booking.photoKey, url);
         } catch (error) {
-          photoStatus.textContent = "התמונה גדולה מדי לשמירה בדפדפן. אפשר לבחור תמונה קטנה יותר.";
+          photoStatus.textContent = "התמונה גדולה מדי. בחרו תמונה קטנה יותר.";
           return;
         }
-        photoStatus.textContent = "התמונה נשמרה במכשיר הזה בלבד.";
+        photoStatus.textContent = "התמונה נשמרה.";
         showPhoto(url);
       };
       image.onerror = function () {
@@ -1903,7 +1899,7 @@
     } catch (error) {
       return;
     }
-    photoStatus.textContent = "התמונה הוסרה מהמכשיר הזה.";
+    photoStatus.textContent = "התמונה הוסרה.";
     showPhoto("");
   });
 
@@ -1946,7 +1942,7 @@
     if (!window.VIP_HOLD_UI || !window.VIP_HOLD_UI.confirm) {
       var missing = document.getElementById("hold-status");
       if (missing) {
-        missing.textContent = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+        missing.textContent = "לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.";
       }
       continueButton.disabled = true;
       return;
@@ -1964,7 +1960,7 @@
       detailsBusy = false;
       var failed = document.getElementById("hold-status");
       if (failed) {
-        failed.textContent = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+        failed.textContent = "לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.";
       }
       paint();
     });
@@ -2113,7 +2109,7 @@
   if (storedPhoto) {
     var image = document.createElement("img");
     image.src = storedPhoto;
-    image.alt = "תמונת הכניסה לבניין שנשמרה במכשיר";
+    image.alt = "תמונת הכניסה לבניין";
     photo.appendChild(image);
   } else {
     line(photo, "לא נוספה תמונת כניסה.");
@@ -2220,28 +2216,28 @@
     }
     var watched = window.VIP_SLOT_HOLD || {};
     if (watched.pending) {
-      saySend("בודקים את השמירה על השעה.");
+      saySend("בודק את השעה…");
       return;
     }
     if (!watched.unverified && (!watched.matches || watched.blocked || watched.expired)) {
-      saySend(watched.message || "השמירה על השעה פגה. בחרו שעה מחדש.");
+      saySend(watched.message || "הזמן לשמירת השעה הסתיים. בחרו שעה מחדש.");
       button.disabled = true;
       return;
     }
     if (!auth || !auth.whenReady || !auth.requestAppointment) {
-      saySend("החיבור לשרת לא נטען בעמוד.");
+      saySend("אין חיבור כרגע. נסו שוב בעוד רגע.");
       return;
     }
     if (!window.VIP_HOLD_UI || !window.VIP_HOLD_UI.confirm) {
-      saySend("לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.");
+      saySend("לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.");
       button.disabled = true;
       return;
     }
     button.disabled = true;
-    saySend("בודקים את השמירה על השעה.");
+    saySend("בודק את השעה…");
     window.VIP_HOLD_UI.confirm().then(function (check) {
       if (!check || !check.ok || !check.hold || !check.hold.id) {
-        var expiredText = check && check.error ? check.error : "השמירה על השעה פגה. בחרו שעה מחדש.";
+        var expiredText = check && check.error ? check.error : "הזמן לשמירת השעה הסתיים. בחרו שעה מחדש.";
         saySend(expiredText);
         button.disabled = true;
         if (expiredText.indexOf("הסתיים") !== -1) {
@@ -2268,7 +2264,7 @@
       var holdExpires = Date.parse(check.hold.expiresAt);
       var holdServerNow = Date.parse(check.hold.serverNow || "");
       if (isNaN(holdServerNow) || isNaN(holdExpires) || holdExpires <= holdServerNow) {
-        saySend("חלון ההזמנה של 10 הדקות הסתיים.");
+        saySend("עברו 10 הדקות להזמנה. בחרו שעה מחדש.");
         button.disabled = true;
         if (window.VIP_BOOKING && window.VIP_BOOKING.abandonExpired) {
           window.VIP_BOOKING.abandonExpired();
@@ -2276,7 +2272,7 @@
         return { id: "", skipped: true };
       }
       window.VIP_SENDING = true;
-      saySend("שולחים את הבקשה...");
+      saySend("שולח את הבקשה…");
       try {
         photo = sessionStorage.getItem(booking.sentPhotoKey) || "";
       } catch (error) {
@@ -2284,7 +2280,7 @@
       }
       return auth.whenReady().then(function (ready) {
         if (!ready) {
-          return { id: "", error: "החיבור לשרת לא נטען בעמוד." };
+          return { id: "", error: "אין חיבור כרגע. נסו שוב בעוד רגע." };
         }
         return auth.session();
       }).then(function (result) {
@@ -2300,7 +2296,7 @@
               button.click();
             }, result && result.error ? result.error : "כדי לשלוח את הבקשה צריך להתחבר או להירשם.");
           } else {
-            saySend("כדי לשלוח את הבקשה צריך להתחבר או להירשם. הפרטים נשארים בעמוד.");
+            saySend("כדי לשלוח את הבקשה צריך להתחבר או להירשם.");
           }
           return { id: "", skipped: true };
         }
@@ -2330,7 +2326,7 @@
       }
       window.VIP_SENDING = false;
       if (!result || result.error || !result.id) {
-        var failure = result && result.error ? result.error : "הבקשה לא נשמרה.";
+        var failure = result && result.error ? result.error : "לא הצלחנו לשלוח את הבקשה. נסו שוב בעוד רגע.";
         saySend(failure);
         if (failure.indexOf("הסתיים") !== -1 || failure.indexOf("פגה") !== -1) {
           button.disabled = true;
@@ -2385,7 +2381,7 @@
     }).catch(function () {
       window.VIP_SENDING = false;
       button.disabled = false;
-      saySend("הבקשה לא נשמרה.");
+      saySend("לא הצלחנו לשלוח את הבקשה. נסו שוב בעוד רגע.");
     });
   });
 
@@ -2740,11 +2736,11 @@
         if (orders.forgetAccount) {
           orders.forgetAccount();
         }
-        sayOrders("לא ניתן לטעון את ההזמנות מהשרת.");
+        sayOrders("לא הצלחנו לטעון את ההזמנות. נסו שוב בעוד רגע.");
         paint(list, false);
         return Promise.resolve();
       }
-      sayOrders("טוענים את ההזמנות מהחשבון...");
+      sayOrders("טוען את ההזמנות…");
       return auth.profile().then(function (result) {
         if (!result || !result.session || !result.session.user) {
           signedIn = false;
@@ -2768,7 +2764,7 @@
             if (orders.forgetAccount) {
               orders.forgetAccount();
             }
-            sayOrders(loaded && loaded.error ? loaded.error : "לא ניתן לטעון את ההזמנות מהשרת.");
+            sayOrders(loaded && loaded.error ? loaded.error : "לא הצלחנו לטעון את ההזמנות. נסו שוב בעוד רגע.");
             paint(list, false);
             return null;
           }
@@ -2785,7 +2781,7 @@
         if (orders.forgetAccount) {
           orders.forgetAccount();
         }
-        sayOrders("לא ניתן לטעון את ההזמנות מהשרת.");
+        sayOrders("לא הצלחנו לטעון את ההזמנות. נסו שוב בעוד רגע.");
         paint(list, false);
       });
     }
@@ -2844,7 +2840,7 @@
       }
     } else if (saved.server) {
       if (feedback) {
-        feedback.textContent = "ההזמנה בוטלה בחשבון. זאבי יראה את הסטטוס בעמוד הניהול.";
+        feedback.textContent = "ההזמנה בוטלה.";
       }
     } else {
       if (window.VIP_NOTICES) {
@@ -2855,7 +2851,7 @@
         });
       }
       if (feedback) {
-        feedback.textContent = "ההזמנה בוטלה במכשיר זה. ההזמנות הישנות במכשיר לא נמחקו.";
+        feedback.textContent = "ההזמנה בוטלה.";
       }
     }
     cancelId = "";
@@ -2929,7 +2925,7 @@
     + "<form id=\"auth-form\" method=\"post\" action=\"#\" autocomplete=\"off\" novalidate>"
     + "<div class=\"field\"><label for=\"auth-username\">שם משתמש</label>"
     + "<input id=\"auth-username\" name=\"vip-user\" type=\"text\" autocomplete=\"off\" maxlength=\"24\" autocapitalize=\"none\" spellcheck=\"false\">"
-    + "<p class=\"auth-hint\" id=\"auth-hint\" hidden>בהרשמה השם באנגלית בלבד: אותיות, ספרות או _.</p></div>"
+    + "<p class=\"auth-hint\" id=\"auth-hint\" hidden>השם באנגלית בלבד, אותיות ומספרים</p></div>"
     + "<div class=\"field\"><label for=\"auth-password\">סיסמה</label>"
     + "<div class=\"auth-secret\"><input id=\"auth-password\" name=\"vip-pass\" type=\"password\" autocomplete=\"new-password\" maxlength=\"200\">"
     + "<button type=\"button\" id=\"auth-eye\" aria-controls=\"auth-password\" aria-pressed=\"false\" aria-label=\"הצגת הסיסמה\">"
@@ -2938,8 +2934,8 @@
     + "</button></div></div>"
     + "<p id=\"auth-status\" class=\"orders-note\" role=\"status\"></p>"
     + "<button type=\"submit\" class=\"btn btn--gold\" id=\"auth-login\">התחברות</button>"
-    + "<button type=\"button\" class=\"btn btn--ghost\" id=\"auth-signup\">הרשמה</button>"
     + "<button type=\"button\" class=\"btn btn--ghost\" id=\"auth-close\">המשך ללא התחברות</button>"
+    + "<p class=\"auth-switch\"><button type=\"button\" id=\"auth-signup\">עדיין לא רשומים? הירשמו עכשיו</button></p>"
     + "</form>";
   document.body.appendChild(dialog);
 
@@ -2979,6 +2975,7 @@
   var title = dialog.querySelector("#auth-title");
   var loginButton = dialog.querySelector("#auth-login");
   var signupButton = dialog.querySelector("#auth-signup");
+  var closeButton = dialog.querySelector("#auth-close");
   var authMode = "login";
 
   function setMode(next) {
@@ -2992,8 +2989,11 @@
     if (loginButton) {
       loginButton.textContent = authMode === "signup" ? "הרשמה" : "התחברות";
     }
+    if (closeButton) {
+      closeButton.hidden = authMode === "signup";
+    }
     if (signupButton) {
-      signupButton.textContent = authMode === "signup" ? "התחברות" : "הרשמה";
+      signupButton.textContent = authMode === "signup" ? "רשומים כבר אצלנו? לחצו כאן להתחבר" : "עדיין לא רשומים? הירשמו עכשיו";
     }
   }
 
@@ -3089,7 +3089,6 @@
     var username = usernameInput ? usernameInput.value.trim().toLowerCase() : "";
     var password = passwordInput ? passwordInput.value : "";
     if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(username)) {
-      say("שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _.");
       return null;
     }
     if (!password || password.length < 6) {
@@ -3104,14 +3103,14 @@
     var method = action === "signUp" ? "signUpWithUsername" : "signInWithUsername";
     if (!fields || !auth[method]) {
       if (fields && !auth[method]) {
-        say("החיבור לשרת לא נטען בעמוד.");
+        say("אין חיבור כרגע. נסו שוב בעוד רגע.");
       }
       return;
     }
-    say("בודקים את החשבון...");
+    say("בודק את הפרטים…");
     auth[method](fields.username, fields.password).then(function (result) {
       if (!result || result.error || !result.session) {
-        say(result && result.error ? result.error : (result && result.needsConfirm ? "החשבון נפתח, אבל השרת עדיין דורש אישור לפני התחברות." : "הפעולה נכשלה."));
+        say(result && result.error ? result.error : (result && result.needsConfirm ? "החשבון נפתח, אבל צריך לאשר אותו לפני ההתחברות." : "הפעולה נכשלה."));
         return;
       }
       if (auth.profile) {
@@ -3827,7 +3826,7 @@
 
   function confirm() {
     if (!auth || !auth.currentHold || !auth.currentBookingWindow || !auth.session) {
-      return Promise.resolve({ ok: false, error: "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע." });
+      return Promise.resolve({ ok: false, error: "לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע." });
     }
     return auth.session().then(function (sessionResult) {
       if (!sessionResult || !sessionResult.session) {
@@ -3851,7 +3850,7 @@
       deadline = result ? result.deadline : null;
       holdResult = result ? result.hold : null;
       if (!deadline || deadline.error || deadline.expired || !deadline.expiresAt) {
-        message = deadline && deadline.error ? deadline.error : "חלון ההזמנה של 10 הדקות הסתיים.";
+        message = deadline && deadline.error ? deadline.error : "עברו 10 הדקות להזמנה. בחרו שעה מחדש.";
         clearToken();
         if (deadline && deadline.expiresAt) {
           markExpired(deadline.expiresAt, deadline.serverNow);
@@ -3874,14 +3873,14 @@
         return { ok: false, error: holdResult.error };
       }
       if (!holdResult || holdResult.error) {
-        message = holdResult && holdResult.error ? holdResult.error : "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+        message = holdResult && holdResult.error ? holdResult.error : "לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.";
         setStatus(message);
         publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: true, message: message });
         return { ok: false, error: message };
       }
       if (holdResult.hold && !same(holdResult.hold)) {
         clearToken();
-        message = "השמירה לא תואמת את השעה שנבחרה. בחרו שעה מחדש.";
+        message = "השעה שנבחרה לא תואמת. בחרו שעה מחדש.";
         setStatus(message);
         showReselect();
         publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: false, message: message });
@@ -3892,7 +3891,7 @@
       }
       if (!fresh(holdResult.hold)) {
         clearToken();
-        message = "השמירה על השעה פגה. בחרו שעה מחדש.";
+        message = "הזמן לשמירת השעה הסתיים. בחרו שעה מחדש.";
         setStatus(message);
         showReselect();
         publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: false, message: message });
@@ -3903,7 +3902,7 @@
       publish({ pending: false, id: holdResult.hold.id, matches: true, blocked: false, expired: false, retry: false, unverified: false, message: "" });
       return { ok: true, hold: holdResult.hold };
     }).catch(function () {
-      var message = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+      var message = "לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.";
       setStatus(message);
       publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: true, message: message });
       return { ok: false, error: message };
@@ -3939,7 +3938,7 @@
 
   publish({ pending: true, id: "", matches: false, blocked: false, expired: false, retry: false, unverified: false, message: "" });
   if (!auth || !auth.currentHold) {
-    var missing = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+    var missing = "לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.";
     setStatus(missing);
     publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: true, message: missing });
     return;

@@ -140,7 +140,7 @@
       var auth = window.VIP_SUPABASE;
       event.preventDefault();
       if (!/^[a-z0-9][a-z0-9_]{2,23}$/.test(username)) {
-        showLoginError("שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _.");
+        showLoginError("השם באנגלית בלבד, אותיות ומספרים");
         return;
       }
       if (!password) {
@@ -148,10 +148,10 @@
         return;
       }
       if (!auth || !auth.signInWithUsername || !auth.profile) {
-        showLoginError("החיבור לשרת לא נטען בעמוד.");
+        showLoginError("אין חיבור כרגע. נסו שוב בעוד רגע.");
         return;
       }
-      showLoginError("בודקים את החשבון...");
+      showLoginError("בודק את הפרטים…");
       auth.signInWithUsername(username, password).then(function (result) {
         if (passwordInput) {
           passwordInput.value = "";
@@ -666,7 +666,7 @@
   function reloadServerSchedule(statusNode, successText) {
     var auth = window.VIP_SUPABASE;
     if (!auth || !auth.fetchSchedule) {
-      statusNode.textContent = "לא ניתן לטעון את השעות מהשרת.";
+      statusNode.textContent = "לא הצלחנו לטעון את השעות. נסו שוב בעוד רגע.";
       return Promise.resolve();
     }
     return auth.fetchSchedule().then(function (result) {
@@ -674,7 +674,7 @@
         return false;
       }
       if (!result || result.error || !result.schedule || !result.schedule.weekly || !result.schedule.weekly.length || !schedule.applyRemote) {
-        statusNode.textContent = result && result.error ? result.error : "לא ניתן לטעון את השעות מהשרת.";
+        statusNode.textContent = result && result.error ? result.error : "לא הצלחנו לטעון את השעות. נסו שוב בעוד רגע.";
         return false;
       }
       schedule.applyRemote(result.schedule, []);
@@ -694,7 +694,7 @@
       paintConflicts();
       return true;
     }).catch(function () {
-      statusNode.textContent = "לא ניתן לטעון את השעות מהשרת.";
+      statusNode.textContent = "לא הצלחנו לטעון את השעות. נסו שוב בעוד רגע.";
       return false;
     });
   }
@@ -704,7 +704,7 @@
     if (!statusNode) {
       return;
     }
-    statusNode.textContent = "טוענים את השעות מהשרת...";
+    statusNode.textContent = "טוען שעות…";
     reloadServerSchedule(statusNode, "");
   }
 
@@ -713,7 +713,7 @@
     var message = document.getElementById("biz-status");
     if (!auth || !auth.fetchCatalog) {
       if (message) {
-        message.textContent = "לא ניתן לטעון את המחירים מהשרת.";
+        message.textContent = "לא הצלחנו לטעון את המחירים. נסו שוב בעוד רגע.";
       }
       return;
     }
@@ -723,7 +723,7 @@
       }
       if (!result || result.error || !result.rows || !result.rows.length) {
         if (message) {
-          message.textContent = result && result.error ? result.error : "לא ניתן לטעון את המחירים מהשרת.";
+          message.textContent = result && result.error ? result.error : "לא הצלחנו לטעון את המחירים. נסו שוב בעוד רגע.";
         }
         return;
       }
@@ -738,7 +738,7 @@
       }
     }).catch(function () {
       if (message) {
-        message.textContent = "לא ניתן לטעון את המחירים מהשרת.";
+        message.textContent = "לא הצלחנו לטעון את המחירים. נסו שוב בעוד רגע.";
       }
     });
   }
@@ -774,9 +774,7 @@
         return;
       }
       if (!box.childNodes.length) {
-        paragraph(box, serverMode
-          ? "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות:"
-          : "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות במכשיר זה:");
+        paragraph(box, "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות:");
       }
       paragraph(box, whenText(order) + " — " + ((order.customer && order.customer.fullName) || "בלי שם"));
     });
@@ -799,7 +797,7 @@
       return;
     }
     if (serverMode && !schedule.remote) {
-      statusNode.textContent = "לא ניתן לשמור לפני שהשעות נטענו מהשרת.";
+      statusNode.textContent = "השעות עדיין נטענות. נסו שוב בעוד רגע.";
       return;
     }
     if (serverMode) {
@@ -813,7 +811,7 @@
         closeSaturday(days);
       }
       if (!auth || !auth.saveWeeklyHours || !auth.saveWeekOverride) {
-        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+        statusNode.textContent = "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
         return;
       }
       var request = hoursMode === "standing"
@@ -821,21 +819,21 @@
         : auth.saveWeekOverride(weekStart, shiftIso(weekStart, 6), rowsFor(weekStart, days, true));
       request.then(function (result) {
         if (!result || result.error) {
-          statusNode.textContent = result && result.error ? result.error : "לא ניתן לשמור את השעות בשרת.";
+          statusNode.textContent = result && result.error ? result.error : "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
           return null;
         }
         if (hoursMode === "week") {
           weekIsOverride = true;
         }
         return reloadServerSchedule(statusNode, hoursMode === "standing"
-          ? "השעות הקבועות נשמרו בשרת. תורים שכבר נקבעו לא בוטלו."
-          : "השבוע שנבחר נשמר בשרת. השעות הקבועות לא השתנו, וחריגי התאריך של השבוע הוסרו. תורים שכבר נקבעו לא בוטלו.").then(function (ok) {
+          ? "השעות הקבועות נשמרו. תורים שכבר נקבעו לא בוטלו."
+          : "השבוע שנבחר נשמר. השעות הקבועות לא השתנו, וחריגי התאריך של השבוע הוסרו. תורים שכבר נקבעו לא בוטלו.").then(function (ok) {
           if (!ok) {
-            statusNode.textContent = "השמירה נשלחה לשרת, אבל לא ניתן לטעון מחדש את השעות.";
+            statusNode.textContent = "השעות נשמרו. רעננו את העמוד.";
           }
         });
       }).catch(function () {
-        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+        statusNode.textContent = "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
       });
       return;
     }
@@ -854,7 +852,7 @@
     try {
       writeAvailability(stored);
     } catch (error) {
-      statusNode.textContent = "לא ניתן לשמור במכשיר זה.";
+      statusNode.textContent = "לא הצלחנו לשמור. נסו שוב בעוד רגע.";
       return;
     }
     if (hoursMode === "week") {
@@ -873,29 +871,29 @@
     var statusNode = document.getElementById("week-status");
     var stored;
     if (serverMode && !schedule.remote) {
-      statusNode.textContent = "לא ניתן לשמור לפני שהשעות נטענו מהשרת.";
+      statusNode.textContent = "השעות עדיין נטענות. נסו שוב בעוד רגע.";
       return;
     }
     if (serverMode) {
       var auth = window.VIP_SUPABASE;
       var weekStart = iso(cursor);
       if (!auth || !auth.clearWeekOverride) {
-        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+        statusNode.textContent = "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
         return;
       }
       auth.clearWeekOverride(weekStart, shiftIso(weekStart, 6)).then(function (result) {
         if (!result || result.error) {
-          statusNode.textContent = result && result.error ? result.error : "לא ניתן לשמור את השעות בשרת.";
+          statusNode.textContent = result && result.error ? result.error : "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
           return;
         }
         weekIsOverride = false;
-        reloadServerSchedule(statusNode, "השבוע חזר לשעות הקבועות בשרת. התורים הקיימים לא בוטלו.").then(function (ok) {
+        reloadServerSchedule(statusNode, "השבוע חזר לשעות הקבועות. התורים הקיימים לא בוטלו.").then(function (ok) {
           if (!ok) {
-            statusNode.textContent = "השמירה נשלחה לשרת, אבל לא ניתן לטעון מחדש את השעות.";
+            statusNode.textContent = "השעות נשמרו. רעננו את העמוד.";
           }
         });
       }).catch(function () {
-        statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
+        statusNode.textContent = "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
       });
       return;
     }
@@ -907,7 +905,7 @@
     try {
       writeAvailability(stored);
     } catch (error) {
-      statusNode.textContent = "לא ניתן לשמור במכשיר זה.";
+      statusNode.textContent = "לא הצלחנו לשמור. נסו שוב בעוד רגע.";
       return;
     }
     weekIsOverride = false;
@@ -1017,7 +1015,7 @@
       approve.addEventListener("click", function () {
         applyOrderAction(function () {
           return ordersApi.approve(order.id);
-        }, "התור סומן כמאושר במכשיר זה בלבד. לא נשלחה התראה.", "התור אושר בשרת. לא נשלחה התראה.");
+        }, "לא הצלחנו לאשר את התור. נסו שוב בעוד רגע.", "התור אושר.");
       });
       reject.type = "button";
       reject.className = "btn btn--ghost";
@@ -1025,7 +1023,7 @@
       reject.addEventListener("click", function () {
         applyOrderAction(function () {
           return ordersApi.reject(order.id);
-        }, "הבקשה סומנה כנדחתה במכשיר זה בלבד. לא נשלחה התראה.", "הבקשה נדחתה בשרת. לא נשלחה התראה.");
+        }, "לא הצלחנו לדחות את הבקשה. נסו שוב בעוד רגע.", "הבקשה נדחתה.");
       });
       row.appendChild(approve);
       row.appendChild(reject);
@@ -1059,7 +1057,7 @@
     });
     list.textContent = "";
     if (!items.length) {
-      paragraph(list, "אין תורים ביום הזה במכשיר זה.", "orders-empty");
+      paragraph(list, "אין תורים ביום הזה.", "orders-empty");
       return;
     }
     items.forEach(function (order) {
@@ -1099,7 +1097,7 @@
     list.textContent = "";
     syncToolMarks();
     if (!items.length) {
-      paragraph(list, "אין הזמנות במכשיר זה לפי הסינון שנבחר.", "orders-empty");
+      paragraph(list, "אין הזמנות לפי הסינון שנבחר.", "orders-empty");
       return;
     }
     items.forEach(function (order) {
@@ -1117,7 +1115,7 @@
     });
     list.textContent = "";
     if (!items.length) {
-      paragraph(list, "אין בקשות ממתינות במכשיר זה.", "orders-empty");
+      paragraph(list, "אין בקשות ממתינות.", "orders-empty");
       return;
     }
     items.forEach(function (order) {
@@ -1152,7 +1150,6 @@
       var button = document.createElement("button");
       card.className = "admin-compact is-cancelled";
       paragraph(card, item.text);
-      paragraph(card, "ההתראה שמורה במכשיר זה. היא עדיין לא נשלחת לזאבי.");
       button.type = "button";
       button.className = "btn btn--ghost";
       button.textContent = "הבנתי";
@@ -1170,7 +1167,7 @@
   function applyOrderAction(result, localText, serverText) {
     if (typeof result === "function") {
       if (actionBusy) {
-        setFeedback("הפעולה הקודמת עדיין נשלחת.");
+        setFeedback("הפעולה הקודמת עדיין מתבצעת.");
         return;
       }
       actionBusy = true;
@@ -1228,7 +1225,7 @@
     var text = document.getElementById("admin-confirm-text");
     var customer = order.customer || {};
     cancelId = order.id;
-    text.textContent = "לבטל את התור של " + (customer.fullName || "הלקוח") + " ב" + whenText(order) + "? הביטול נשמר במכשיר זה בלבד, והלקוח לא מקבל התראה.";
+    text.textContent = "לבטל את התור של " + (customer.fullName || "הלקוח") + " ב" + whenText(order) + "?";
     if (dialog.showModal) {
       dialog.showModal();
     }
@@ -1444,7 +1441,7 @@
     if (cancelId) {
       applyOrderAction(function () {
         return ordersApi.cancel(cancelId, { by: "admin" });
-      }, "התור סומן כבוטל במכשיר זה בלבד. לא נשלחה התראה.", "התור בוטל בשרת. לא נשלחה התראה.");
+      }, "לא הצלחנו לבטל את התור. נסו שוב בעוד רגע.", "התור בוטל.");
       cancelId = "";
     }
     dialog.close();
@@ -1506,14 +1503,14 @@
       return;
     }
     if (serverMode && !serverCatalog) {
-      message.textContent = "לא ניתן לשמור לפני שהמחירים נטענו מהשרת.";
+      message.textContent = "המחירים עדיין נטענים. נסו שוב בעוד רגע.";
       return;
     }
     if (serverMode) {
       var auth = window.VIP_SUPABASE;
       var jobs = [];
       if (!auth || !auth.saveService || !auth.saveBusinessSettings) {
-        message.textContent = "לא ניתן לשמור את המחירים בשרת.";
+        message.textContent = "לא הצלחנו לשמור את המחירים. נסו שוב בעוד רגע.";
         return;
       }
       jobs.push(auth.saveBusinessSettings(serviceMinutes, travel));
@@ -1532,7 +1529,7 @@
             savedSettings = result;
           }
           if (!failed && (!result || result.error)) {
-            failed = result && result.error ? result.error : "לא ניתן לשמור את המחירים בשרת.";
+            failed = result && result.error ? result.error : "לא הצלחנו לשמור את המחירים. נסו שוב בעוד רגע.";
           }
         });
         if (failed) {
@@ -1540,7 +1537,7 @@
           return;
         }
         if (!savedSettings) {
-          message.textContent = "לא ניתן לקרוא את ההגדרות שנשמרו בשרת.";
+          message.textContent = "הפרטים נשמרו, אבל לא הצלחנו להציג אותם מחדש.";
           return;
         }
         serverCatalog = Object.keys(current.services).map(function (id) {
@@ -1571,12 +1568,12 @@
             services: current.services
           }));
         } catch (error) {
-          message.textContent = "הזמנים והמחירים נשמרו בשרת. העותק במכשיר לא נשמר.";
+          message.textContent = "הזמנים והמחירים נשמרו.";
           return;
         }
-        message.textContent = "משך השירות, זמן הנסיעה והמחירים נשמרו בשרת.";
+        message.textContent = "משך השירות, זמן הנסיעה והמחירים נשמרו.";
       }).catch(function () {
-        message.textContent = "לא ניתן לשמור את המחירים בשרת.";
+        message.textContent = "לא הצלחנו לשמור את המחירים. נסו שוב בעוד רגע.";
       });
       return;
     }
@@ -1589,14 +1586,14 @@
         services: current.services
       }));
     } catch (error) {
-      message.textContent = "לא ניתן לשמור במכשיר זה.";
+      message.textContent = "לא הצלחנו לשמור. נסו שוב בעוד רגע.";
       return;
     }
     if (window.VIP_SCHEDULE) {
       window.VIP_SCHEDULE.serviceMinutes = serviceMinutes;
       window.VIP_SCHEDULE.travelMinutes = travel;
     }
-    message.textContent = "ההגדרות נשמרו במכשיר זה בלבד.";
+    message.textContent = "לא הצלחנו לשמור את ההגדרות. נסו שוב בעוד רגע.";
   });
   each(document.querySelectorAll("[data-admin-panel]"), function (button) {
     button.addEventListener("click", function () {

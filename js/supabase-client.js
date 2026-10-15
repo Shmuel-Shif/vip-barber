@@ -434,7 +434,7 @@
       return "שם המשתמש תפוס. אפשר להתחבר.";
     }
     if (text.indexOf("invalid username") !== -1) {
-      return "שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _.";
+      return "השם באנגלית בלבד, אותיות ומספרים";
     }
     if (text.indexOf("invalid login") !== -1 || text.indexOf("invalid credentials") !== -1) {
       return "האימייל או הסיסמה לא נכונים.";
@@ -449,7 +449,7 @@
       return "הסיסמה צריכה 6 תווים לפחות.";
     }
     if (text.indexOf("signups not allowed") !== -1 || (text.indexOf("signup") !== -1 && text.indexOf("disabled") !== -1)) {
-      return "ההרשמה סגורה בשרת.";
+      return "ההרשמה סגורה כרגע.";
     }
     if (text.indexOf("authentication required") !== -1) {
       return "צריך להתחבר לפני שליחת ההזמנה.";
@@ -458,22 +458,22 @@
       return "החשבון עדיין לא מוכן. נסו להתחבר שוב.";
     }
     if (text.indexOf("booking window is still open") !== -1) {
-      return "חלון ההזמנה עדיין פתוח.";
+      return "הזמן להזמנה עדיין פתוח.";
     }
     if (text.indexOf("service durations are not configured") !== -1) {
-      return "משך השירות לא הוגדר בשרת.";
+      return "משך השירות אינו מוגדר כרגע.";
     }
     if (text.indexOf("hold expired") !== -1) {
-      return "חלון ההזמנה של 10 הדקות הסתיים.";
+      return "עברו 10 הדקות להזמנה. בחרו שעה מחדש.";
     }
     if (text.indexOf("hold does not match") !== -1) {
-      return "השמירה לא תואמת את השעה שנבחרה. בחרו שעה מחדש.";
+      return "השעה שנבחרה לא תואמת. בחרו שעה מחדש.";
     }
     if (text.indexOf("party too large") !== -1) {
       return "לקבוצה של יותר מחמישה אנשים זאבי מתאם אישית. אפשר לפנות בטלפון או בוואטסאפ.";
     }
     if (text.indexOf("time already taken") !== -1 || text.indexOf("travel gap too small") !== -1) {
-      return "השעה הזו כבר תפוסה.";
+      return "השעה הזו כבר אינה זמינה. בחרו שעה אחרת.";
     }
     if (text.indexOf("outside the open booking week") !== -1) {
       return "התאריך מחוץ לשבוע הפתוח להזמנה.";
@@ -500,7 +500,7 @@
       return "הפעולה הזו שמורה לחשבון האדמין.";
     }
     if (text.indexOf("failed to fetch") !== -1 || text.indexOf("network") !== -1 || text.indexOf("load failed") !== -1) {
-      return "אין חיבור לשרת.";
+      return "אין חיבור כרגע. נסו שוב בעוד רגע.";
     }
     if (text.indexOf("customer cannot change") !== -1) {
       return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
@@ -511,7 +511,10 @@
     if (text.indexOf("more than 7") !== -1 || text.indexOf("7 hours") !== -1) {
       return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
     }
-    return raw;
+    if (window.console && typeof window.console.error === "function") {
+      window.console.error(raw);
+    }
+    return "לא הצלחנו להשלים את הפעולה. נסו שוב בעוד רגע.";
   }
 
   function windowResult(result) {
@@ -649,7 +652,6 @@
     url: url,
     client: null,
     lastCheck: null,
-    createClient: createClient,
     checkConnection: checkConnection,
     whenReady: whenReady,
     messageFor: messageFor,
@@ -688,7 +690,7 @@
     signUpWithUsername: function (username, password) {
       var name = normalizeUsername(username);
       if (!name) {
-        return Promise.resolve({ session: null, needsConfirm: false, error: "שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _." });
+        return Promise.resolve({ session: null, needsConfirm: false, error: "השם באנגלית בלבד, אותיות ומספרים" });
       }
       return withClient(function (ready) {
         return ready.auth.signUp({
@@ -710,7 +712,7 @@
     signInWithUsername: function (username, password) {
       var name = normalizeUsername(username);
       if (!name) {
-        return Promise.resolve({ session: null, error: "שם המשתמש צריך 3–24 תווים באנגלית, ספרות או _." });
+        return Promise.resolve({ session: null, error: "השם באנגלית בלבד, אותיות ומספרים" });
       }
       return withClient(function (ready) {
         return ready.auth.signInWithPassword({
@@ -931,8 +933,8 @@
             }
             if (status) {
               var label = serverState(status);
-              var lead = wanted === "approved" ? "השרת לא אישר את ההזמנה." : "השרת לא דחה את ההזמנה.";
-              return { error: label ? lead + " המצב בשרת: " + label + "." : lead, status: status };
+              var lead = wanted === "approved" ? "לא הצלחנו לאשר את ההזמנה." : "לא הצלחנו לדחות את ההזמנה.";
+              return { error: label ? lead + " המצב הנוכחי: " + label + "." : lead, status: status };
             }
             return { error: rpcError || "לא ניתן לאמת את תוצאת הפעולה. בדקו את רשימת ההזמנות.", status: "" };
           });

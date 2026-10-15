@@ -1273,6 +1273,7 @@ body:has(.party) {
   font-family: var(--font-serif);
   font-size: clamp(1.35rem, 4.2vw, 2rem);
   font-weight: 500;
+ margin-top: 1.5rem;
   line-height: 1.15;
 }
 
@@ -2236,6 +2237,26 @@ body:has(.summary) {
   font-size: 0.92rem;
   font-weight: 500;
   line-height: 1.4;
+}
+
+.auth-switch {
+  margin: 0.85rem 0 0;
+  text-align: center;
+}
+
+.auth-switch button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ivory-soft);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.auth-modal .btn[hidden] {
+  display: none;
 }
 
 .sent-modal h2 {
@@ -3402,6 +3423,36 @@ dialog[open],
   color: #fff6df;
   border-color: var(--gold-light);
   box-shadow: 0 0 0 3px rgba(232, 214, 170, 0.45);
+}
+
+@media (max-width: 719px) {
+  body.date-screen .hold-timer {
+    left: max(0.7rem, env(safe-area-inset-left));
+    top: calc(var(--header-height) + var(--step-bar-height) + env(safe-area-inset-top) + 0.7rem + (clamp(1.7rem, 4.5vw, 2.4rem) * 0.6) - 0.68rem);
+    width: auto;
+    height: 1.36rem;
+    padding: 0 0.42rem;
+    border-width: 1px;
+    border-radius: 0.32rem;
+    font-size: 0.72rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  body.date-screen .hold-timer.is-late {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 380px) {
+  body.date-screen .hold-timer {
+    left: max(0.4rem, env(safe-area-inset-left));
+    height: 1.2rem;
+    padding: 0 0.32rem;
+    border-radius: 0.28rem;
+    font-size: 0.64rem;
+    top: calc(var(--header-height) + var(--step-bar-height) + env(safe-area-inset-top) + 0.7rem + (clamp(1.7rem, 4.5vw, 2.4rem) * 0.6) - 0.6rem);
+  }
 }
 
 .summary__contact {

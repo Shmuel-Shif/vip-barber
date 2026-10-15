@@ -30,7 +30,6 @@
     <section class="admin-login" id="admin-login" aria-labelledby="admin-login-title">
       <img class="admin-login__logo" src="assets/logo/logo.png" alt="לוגו VIP" width="1090" height="1183">
       <h1 id="admin-login-title">אזור הניהול</h1>
-      <p class="admin-login__note">רק חשבון שהוגדר כאדמין נכנס. אין הרשמה לאדמין מהמסך הזה.</p>
       <form id="admin-login-form" method="post" action="admin.html" autocomplete="off" novalidate onsubmit="return false">
         <label class="admin-field" for="admin-username">שם משתמש
           <input id="admin-username" name="vip-admin-user" type="text" maxlength="24" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="next">
@@ -57,7 +56,7 @@
         <button type="submit" class="btn btn--gold" id="admin-login-submit">התחברות</button>
       </form>
       <noscript>
-        <p class="admin-login__note">כדי להציג את המסך צריך לאפשר JavaScript.</p>
+        <p class="admin-login__note">העמוד לא זמין כרגע.</p>
       </noscript>
     </section>
     <div id="admin-app" hidden>
@@ -101,7 +100,6 @@
           <span class="admin-setcard__name">שעות פעילות</span>
         </button>
         <div class="admin-setcard__body" id="hours-body" hidden>
-          <p class="admin-note">השעות הקבועות חוזרות בכל שבוע. שבת סגורה. שבוע אחד אפשר לשנות בלי לשנות את השאר. תורים שכבר נקבעו לא מבוטלים.</p>
           <div class="admin-filters" id="hours-mode">
             <button type="button" id="hours-standing" aria-pressed="true">שעות קבועות</button>
             <button type="button" id="hours-week" aria-pressed="false">שבוע שנבחר</button>
@@ -182,7 +180,7 @@
     </section>
 
     <noscript>
-      <p class="admin-note">כדי להשתמש בניהול צריך לאפשר JavaScript.</p>
+      <p class="admin-note">העמוד לא זמין כרגע.</p>
     </noscript>
     </div>
   </main>
