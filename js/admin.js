@@ -1303,7 +1303,8 @@
     if (window.VIP_SCHEDULE && typeof window.VIP_SCHEDULE.travelMinutes === "number") {
       travel = window.VIP_SCHEDULE.travelMinutes;
     }
-    document.getElementById("biz-cut").value = String(data.services["mens-haircut"] && data.services["mens-haircut"].minutes >= 10 ? data.services["mens-haircut"].minutes : 30);
+    document.getElementById("biz-cut-men").value = String(data.services["mens-haircut"] && data.services["mens-haircut"].minutes >= 10 ? data.services["mens-haircut"].minutes : 30);
+    document.getElementById("biz-cut-kids").value = String(data.services["kids-haircut"] && data.services["kids-haircut"].minutes >= 10 ? data.services["kids-haircut"].minutes : 30);
     document.getElementById("biz-travel").value = String(travel);
     each(form.querySelectorAll("[data-service]"), function (input) {
       var service = data.services[input.getAttribute("data-service")];
@@ -1438,13 +1439,18 @@
   document.getElementById("business-form").addEventListener("submit", function (event) {
     var message = document.getElementById("biz-status");
     var current = readSettings();
-    var cut = Number(document.getElementById("biz-cut").value);
+    var mensCut = Number(document.getElementById("biz-cut-men").value);
+    var kidsCut = Number(document.getElementById("biz-cut-kids").value);
     var travel = Number(document.getElementById("biz-travel").value);
     var beardMinutes = 10;
     var invalid = false;
     event.preventDefault();
-    if (!(cut >= 10 && cut <= 180) || cut !== Math.round(cut)) {
-      message.textContent = "זמן התספורת צריך להיות בין 10 ל־180 דקות.";
+    if (!(mensCut >= 10 && mensCut <= 180) || mensCut !== Math.round(mensCut)) {
+      message.textContent = "זמן תספורת הגברים צריך להיות בין 10 ל־180 דקות.";
+      return;
+    }
+    if (!(kidsCut >= 10 && kidsCut <= 180) || kidsCut !== Math.round(kidsCut)) {
+      message.textContent = "זמן תספורת הילדים צריך להיות בין 10 ל־180 דקות.";
       return;
     }
     if (!(travel >= 0 && travel <= 180) || travel !== Math.round(travel)) {
@@ -1462,10 +1468,10 @@
       });
     }
     if (current.services["mens-haircut"]) {
-      current.services["mens-haircut"].minutes = cut;
+      current.services["mens-haircut"].minutes = mensCut;
     }
     if (current.services["kids-haircut"]) {
-      current.services["kids-haircut"].minutes = cut;
+      current.services["kids-haircut"].minutes = kidsCut;
     }
     if (current.services.beard) {
       current.services.beard.minutes = beardMinutes;
@@ -1543,7 +1549,7 @@
           return;
         }
         document.getElementById("biz-travel").removeAttribute("data-touched");
-        message.textContent = "זמן התספורת, זמן הנסיעה והמחירים נשמרו.";
+        message.textContent = "זמני התספורת, זמן הנסיעה והמחירים נשמרו.";
       }).catch(function () {
         message.textContent = "לא ניתן לשמור את המחירים בשרת.";
       });

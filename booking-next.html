@@ -34,7 +34,7 @@
   <main id="content">
     <section class="cal" id="booking-calendar" aria-labelledby="cal-title">
       <h1 id="cal-title">בחר תאריך ושעה</h1>
-      <p class="cal__hint">אפשר להזמין רק עד סוף השבוע הזה. בשבת נפתח השבוע הבא, מיום ראשון והלאה.</p>
+      <p class="cal__hint">אפשר להזמין את השבוע הנוכחי ואת השבוע הבא. ביום ראשון החלון מתקדם.</p>
       <div class="cal__nav">
         <button type="button" id="cal-prev" aria-label="החודש הקודם">‹</button>
         <h2 id="cal-label"></h2>
@@ -45,6 +45,7 @@
       </div>
       <div id="cal-grid" class="cal__grid" role="grid" aria-labelledby="cal-label"></div>
       <div id="cal-times" class="cal__times"></div>
+      <p id="cal-status" class="orders-note" role="status"></p>
       <button type="button" class="btn btn--gold cal__continue" id="cal-continue" disabled>המשך</button>
     </section>
   </main>

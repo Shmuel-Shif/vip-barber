@@ -251,16 +251,77 @@ window.VIP_SCHEDULE = {
     return result;
   }
 
-  function overlapsBreak(slot, breaks) {
+  function slotsStepped(start, end, step) {
+    var cursorMin = minutes(start);
+    var endMin = minutes(end);
+    var result = [];
+    if (cursorMin === null || endMin === null || !step || step < 1) {
+      return [];
+    }
+    while (cursorMin < endMin) {
+      result.push(two(Math.floor(cursorMin / 60)) + ":" + two(cursorMin % 60));
+      cursorMin += step;
+    }
+    return result;
+  }
+
+  function serviceMinutes(id) {
+    var services = window.VIP_DEMO && window.VIP_DEMO.services ? window.VIP_DEMO.services : [];
+    var found = null;
+    services.forEach(function (service) {
+      if (service.id === id && service.minutes !== null && service.minutes !== undefined && !isNaN(Number(service.minutes))) {
+        found = Number(service.minutes);
+      }
+    });
+    return found;
+  }
+
+  function visitMinutes() {
+    var booking = window.VIP_BOOKING && window.VIP_BOOKING.read ? window.VIP_BOOKING.read() : null;
+    var adults = booking ? Number(booking.adults) || 0 : 0;
+    var children = booking ? Number(booking.children) || 0 : 0;
+    var beards = booking ? Number(booking.beards) || 0 : 0;
+    var mens = serviceMinutes("mens-haircut");
+    var kids = serviceMinutes("kids-haircut");
+    var beard = serviceMinutes("beard");
+    var travel = schedule.travelMinutes;
+    var service;
+    if (!booking || adults < 0 || children < 0 || beards < 0 || adults + children < 2 || adults > 20 || children > 20 || beards > adults) {
+      return null;
+    }
+    if (mens === null || kids === null || beard === null || typeof travel !== "number") {
+      return null;
+    }
+    service = (mens * adults) + (kids * children) + (beard * beards);
+    if (service < 10 || service > 600 || travel < 0 || travel > 180) {
+      return null;
+    }
+    return { service: service, travel: travel };
+  }
+
+  function overlapsSpan(start, duration, from, to) {
+    return start !== null && from !== null && to !== null && start < to && from < start + duration;
+  }
+
+  function overlapsBreak(slot, breaks, duration) {
+    var start = minutes(slot);
+    var span = duration || 30;
+    if (start === null) {
+      return true;
+    }
+    return breaks.some(function (item) {
+      return overlapsSpan(start, span, minutes(item.start), minutes(item.end));
+    });
+  }
+
+  function overlapsBlocked(slot, blocked, duration) {
     var start = minutes(slot);
     if (start === null) {
       return true;
     }
-    var end = start + 30;
-    return breaks.some(function (item) {
-      var from = minutes(item.start);
-      var to = minutes(item.end);
-      return from !== null && to !== null && start < to && end > from;
+    return blocked.some(function (item) {
+      var from = minutes(item);
+      return overlapsSpan(start, duration, from, from === null ? null : from + 30);
     });
   }
 
@@ -304,15 +365,15 @@ window.VIP_SCHEDULE = {
     return new Date(utcGuess - jerusalemOffset(utcGuess));
   }
 
-  function serverTaken(date, slot) {
+  function serverTaken(date, slot, visit) {
     var ranges = schedule.busyRanges && schedule.busyRanges[iso(date)];
     var start = slotMoment(date, slot);
+    var reserved = visit ? (visit.service + visit.travel) * 60 * 1000 : 30 * 60 * 1000;
     if (!ranges || !start) {
       return false;
     }
-    var end = start.getTime() + 30 * 60 * 1000;
     return ranges.some(function (range) {
-      return start.getTime() < range.end && end > range.start;
+      return start.getTime() < range.end && range.start < start.getTime() + reserved;
     });
   }
 
@@ -320,27 +381,51 @@ window.VIP_SCHEDULE = {
     var opts = options || {};
     var day = opts.day || dayFor(date);
     var slots = [];
+    var visit = null;
+    var closeAt = null;
     if (schedule.unavailable || !date || !day || day.status !== "hours") {
       return slots;
     }
-    slots = slotsBetween(day.start, day.end).filter(function (slot) {
-      return day.blocked.indexOf(slot) === -1 && !overlapsBreak(slot, day.breaks);
-    });
+    closeAt = minutes(day.end);
+    if (schedule.fitVisit) {
+      visit = visitMinutes();
+      if (!visit || closeAt === null) {
+        return [];
+      }
+      slots = slotsStepped(day.start, day.end, visit.service + visit.travel);
+      slots = slots.filter(function (slot) {
+        var start = minutes(slot);
+        return start !== null && start < closeAt && !overlapsBreak(slot, day.breaks, visit.service) && !overlapsBlocked(slot, day.blocked, visit.service);
+      });
+    } else {
+      slots = slotsBetween(day.start, day.end);
+      slots = slots.filter(function (slot) {
+        return day.blocked.indexOf(slot) === -1 && !overlapsBreak(slot, day.breaks, 30);
+      });
+    }
     if (!opts.ignorePast) {
-      var now = new Date();
-      var todayKey = iso(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
-      if (iso(date) === todayKey) {
+      if (schedule.fitVisit) {
+        var nowMs = Date.now();
         slots = slots.filter(function (slot) {
-          var at = minutes(slot);
-          var moment = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(at / 60), at % 60, 0, 0);
-          return moment.getTime() > now.getTime();
+          var moment = slotMoment(date, slot);
+          return moment && moment.getTime() > nowMs;
         });
+      } else {
+        var now = new Date();
+        var todayKey = iso(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+        if (iso(date) === todayKey) {
+          slots = slots.filter(function (slot) {
+            var at = minutes(slot);
+            var moment = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(at / 60), at % 60, 0, 0);
+            return moment.getTime() > now.getTime();
+          });
+        }
       }
     }
     if (!opts.ignoreTaken) {
       if (schedule.remote) {
         slots = slots.filter(function (slot) {
-          return !serverTaken(date, slot);
+          return !serverTaken(date, slot, visit);
         });
       } else {
         var busy = taken(iso(date));
@@ -354,7 +439,7 @@ window.VIP_SCHEDULE = {
 
   function bookingUntil(from) {
     var start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-    var extra = start.getDay() === 6 ? 7 : 6 - start.getDay();
+    var extra = (6 - start.getDay()) + 7;
     return new Date(start.getFullYear(), start.getMonth(), start.getDate() + extra);
   }
 
@@ -389,6 +474,7 @@ window.VIP_SCHEDULE = {
   schedule.busyRanges = {};
   schedule.unavailable = false;
   schedule.loadError = "";
+  schedule.fitVisit = false;
   schedule.travelMinutes = null;
   schedule.applyRemote = function (payload, busyRows) {
     var standing = {};

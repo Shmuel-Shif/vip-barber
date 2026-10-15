@@ -212,7 +212,16 @@
     if (text.indexOf("profile missing") !== -1) {
       return "החשבון עדיין לא מוכן. נסו להתחבר שוב.";
     }
-    if (text.indexOf("time already taken") !== -1) {
+    if (text.indexOf("hold expired") !== -1) {
+      return "השמירה על השעה פגה. בחרו שעה מחדש.";
+    }
+    if (text.indexOf("hold does not match") !== -1) {
+      return "השמירה לא תואמת את השעה שנבחרה. בחרו שעה מחדש.";
+    }
+    if (text.indexOf("party too large") !== -1) {
+      return "לקבוצה של יותר מחמישה אנשים זאבי מתאם אישית. אפשר לפנות בטלפון או בוואטסאפ.";
+    }
+    if (text.indexOf("time already taken") !== -1 || text.indexOf("travel gap too small") !== -1) {
       return "השעה הזו כבר תפוסה.";
     }
     if (text.indexOf("outside the open booking week") !== -1) {
@@ -471,12 +480,73 @@
           p_apartment: fields.apartment || "",
           p_entry_code: fields.entryCode || "",
           p_notes: fields.notes || "",
-          p_payment: fields.payment
+          p_payment: fields.payment,
+          p_hold: fields.holdId || null
         }).then(function (result) {
           if (result.error) {
             return { id: "", error: messageFor(result.error) };
           }
           return { id: result.data || "", error: "" };
+        });
+      });
+    },
+    holdSlot: function (fields) {
+      return withClient(function (ready) {
+        var clock = String(fields.time || "");
+        if (clock.length === 5) {
+          clock = clock + ":00";
+        }
+        return ready.rpc("hold_slot", {
+          p_adults: fields.adults,
+          p_children: fields.children,
+          p_beards: fields.beards,
+          p_date: fields.date,
+          p_time: clock
+        }).then(function (result) {
+          var row = result.data && result.data[0] ? result.data[0] : null;
+          if (result.error || !row || !row.hold_id || !row.expires_at) {
+            return { holdId: "", expiresAt: "", error: result.error ? messageFor(result.error) : "השעה לא נשמרה." };
+          }
+          return { holdId: row.hold_id, expiresAt: row.expires_at, error: "" };
+        });
+      });
+    },
+    currentHold: function () {
+      return withClient(function (ready) {
+        return ready.rpc("current_hold").then(function (result) {
+          var row = result.data && result.data[0] ? result.data[0] : null;
+          if (result.error) {
+            return { hold: null, error: messageFor(result.error) };
+          }
+          if (!row || !row.hold_id) {
+            return { hold: null, error: "" };
+          }
+          return {
+            hold: {
+              id: row.hold_id,
+              date: String(row.appointment_date || "").slice(0, 10),
+              time: String(row.appointment_time || "").slice(0, 5),
+              adults: row.adults,
+              children: row.children,
+              beards: row.beards,
+              expiresAt: row.expires_at
+            },
+            error: ""
+          };
+        });
+      });
+    },
+    releaseHold: function () {
+      return withClient(function (ready) {
+        return ready.rpc("release_my_hold").then(function (result) {
+          if (!result.error) {
+            return { error: "" };
+          }
+          var text = messageFor(result.error);
+          if (text.indexOf("צריך להתחבר") !== -1) {
+            return { error: "" };
+          }
+          return { error: text };
         });
       });
     },

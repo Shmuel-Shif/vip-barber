@@ -4,7 +4,8 @@
 -- It is the single gap before the next visit, never between people in the same order.
 -- span = [start, start + service_minutes). That is the haircut end shown to the customer.
 -- blocked_until = service end + that one travel gap. The next visit cannot start earlier.
--- Travel after the last visit may pass closing time. The service itself may not.
+-- Travel after the last visit may pass closing time. The haircut may end after closing too.
+-- The start itself must be inside open hours and earlier than closing.
 -- There is no customer_id, status, service_minutes, travel_minutes, or span argument.
 -- Every order write takes lock_service_date before the row changes.
 
@@ -413,10 +414,7 @@ BEGIN
     RAISE EXCEPTION 'invalid appointment';
   END IF;
 
-  open_until := CASE
-    WHEN EXTRACT(DOW FROM today_local)::integer = 6 THEN today_local + 7
-    ELSE today_local + (6 - EXTRACT(DOW FROM today_local)::integer)
-  END;
+  open_until := today_local + (6 - EXTRACT(DOW FROM today_local)::integer) + 7;
   IF p_date < today_local OR p_date > open_until THEN
     RAISE EXCEPTION 'outside the open booking week';
   END IF;
@@ -459,7 +457,7 @@ BEGIN
   day_end := (p_date + day.end_time) AT TIME ZONE 'Asia/Jerusalem';
   service_span := tstzrange(start_at, service_end, '[)');
 
-  IF start_at <= now() OR start_at < day_start OR service_end > day_end THEN
+  IF start_at <= now() OR start_at < day_start OR start_at >= day_end THEN
     RAISE EXCEPTION 'outside open hours';
   END IF;
 

@@ -776,8 +776,22 @@
   var schedule = window.VIP_SCHEDULE || { standing: {} };
   var draft = booking.read();
   var continueButton = document.getElementById("cal-continue");
-  var today = new Date();
-  var todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  function jerusalemToday() {
+    var parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Jerusalem",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date());
+    var map = {};
+    parts.forEach(function (part) {
+      map[part.type] = part.value;
+    });
+    return new Date(Number(map.year), Number(map.month) - 1, Number(map.day));
+  }
+
+  var todayStart = jerusalemToday();
   var view = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
 
   function two(number) {
@@ -822,7 +836,7 @@
     if (schedule.bookingUntil) {
       return schedule.bookingUntil(from);
     }
-    var extra = from.getDay() === 6 ? 7 : 6 - from.getDay();
+    var extra = (6 - from.getDay()) + 7;
     return new Date(from.getFullYear(), from.getMonth(), from.getDate() + extra);
   }
 
@@ -877,9 +891,7 @@
       button.textContent = slot;
       button.setAttribute("aria-pressed", draft.time === slot ? "true" : "false");
       button.addEventListener("click", function () {
-        draft.time = slot;
-        save();
-        render();
+        selectSlot(slot);
       });
       row.appendChild(button);
     });
@@ -898,9 +910,7 @@
       if (schedule.loadError) {
         hint.textContent = schedule.loadError;
       } else {
-        hint.textContent = todayStart.getDay() === 6
-          ? "היום שבת, ואפשר להזמין לשבוע הבא עד " + untilText + "."
-          : "אפשר להזמין רק עד " + untilText + ". בשבת ייפתח השבוע הבא, מיום ראשון והלאה.";
+        hint.textContent = "אפשר להזמין את השבוע הנוכחי ואת השבוע הבא, עד " + untilText + ". ביום ראשון החלון מתקדם.";
       }
     }
     grid.textContent = "";
@@ -943,6 +953,7 @@
         var nextIso = iso(chosen);
         if (draft.date !== nextIso) {
           draft.time = "";
+          dropHold();
         }
         draft.date = nextIso;
         if (slotsFor(chosen).indexOf(draft.time) === -1) {
@@ -954,14 +965,26 @@
       grid.appendChild(button);
     }
 
-    if (!schedule.unavailable && !schedule.loadError && draft.date && slotsFor(parse(draft.date)).indexOf(draft.time) === -1) {
-      draft.time = "";
-      save();
+    if (!schedule.unavailable && !schedule.loadError && draft.date && draft.time && slotsFor(parse(draft.date)).indexOf(draft.time) === -1) {
+      var owned = holdReady && holdReady.date === draft.date && holdReady.time === draft.time;
+      if (!owned) {
+        draft.time = "";
+        save();
+        if (holdReady || holdBusy) {
+          dropHold();
+        }
+      }
     }
     renderTimes(parse(draft.date));
+    if (times) {
+      times.setAttribute("aria-busy", holdBusy ? "true" : "false");
+    }
     if (continueButton) {
       var enough = booking.enoughPeople(draft);
-      var ready = !!(draft.date && draft.time && enough && !schedule.unavailable && !schedule.loadError);
+      var picked = !!(draft.date && draft.time && enough && !schedule.unavailable && !schedule.loadError);
+      var people = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
+      var saved = people > 5 || (!holdBusy && holdReady && holdReady.date === draft.date && holdReady.time === draft.time);
+      var ready = picked && saved;
       continueButton.disabled = !ready;
       continueButton.setAttribute("aria-disabled", ready ? "false" : "true");
     }
@@ -975,8 +998,255 @@
     view = new Date(view.getFullYear(), view.getMonth() + 1, 1);
     render();
   });
+  var loadedSchedule = null;
+  var releaseReady = Promise.resolve();
+
+  function clearHoldToken() {
+    try {
+      sessionStorage.removeItem("vip-hold-id");
+    } catch (error) {
+      return;
+    }
+  }
+
+  function sayCal(text) {
+    var status = document.getElementById("cal-status");
+    if (status) {
+      status.textContent = text || "";
+    }
+  }
+
+  function refreshBusy() {
+    if (!loadedSchedule || !window.VIP_SUPABASE || !window.VIP_SUPABASE.fetchBusy) {
+      render();
+      return;
+    }
+    window.VIP_SUPABASE.fetchBusy(iso(todayStart), iso(bookUntil)).then(function (busy) {
+      if (busy && !busy.error) {
+        schedule.applyRemote(loadedSchedule, holdReady ? withoutOwnHold(busy.rows, holdReady) : busy.rows);
+      }
+      render();
+    }).catch(function () {
+      render();
+    });
+  }
+
+  var holdGeneration = 0;
+  var holdChain = Promise.resolve();
+  var holdReady = null;
+  var holdBusy = false;
+  var holdTarget = "";
+
+  function dropHold() {
+    var generation = ++holdGeneration;
+    holdReady = null;
+    holdBusy = false;
+    holdTarget = "";
+    clearHoldToken();
+    if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.stop) {
+      window.VIP_HOLD_UI.stop();
+    }
+    holdChain = holdChain.then(function () {
+      if (generation !== holdGeneration) {
+        return null;
+      }
+      if (window.VIP_SUPABASE && window.VIP_SUPABASE.releaseHold) {
+        return window.VIP_SUPABASE.releaseHold();
+      }
+      return null;
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  function rememberHold(id) {
+    try {
+      sessionStorage.setItem("vip-hold-id", id);
+      return true;
+    } catch (error) {
+      clearHoldToken();
+      return false;
+    }
+  }
+
+  function holdIsCurrent(hold) {
+    return !!(hold && holdReady && hold.id === holdReady.id && hold.date === draft.date && String(hold.time || "").slice(0, 5) === draft.time && Number(hold.adults) === Number(draft.adults) && Number(hold.children) === Number(draft.children) && Number(hold.beards) === Number(draft.beards) && Date.parse(hold.expiresAt) > Date.now());
+  }
+
+  function selectSlot(slot) {
+    var people = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
+    var target = draft.date + "|" + slot;
+    var generation;
+    draft.time = slot;
+    save();
+    if (people > 5) {
+      if (holdReady || holdBusy) {
+        dropHold();
+      }
+      render();
+      return;
+    }
+    if (holdReady && holdReady.date === draft.date && holdReady.time === slot && !holdBusy) {
+      render();
+      return;
+    }
+    if (holdBusy && holdTarget === target) {
+      render();
+      return;
+    }
+    generation = ++holdGeneration;
+    holdReady = null;
+    holdBusy = true;
+    holdTarget = target;
+    clearHoldToken();
+    if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.stop) {
+      window.VIP_HOLD_UI.stop();
+    }
+    sayCal("שומרים את השעה...");
+    render();
+    holdChain = holdChain.then(function () {
+      var client = window.VIP_SUPABASE;
+      if (generation !== holdGeneration) {
+        return null;
+      }
+      if (!client || !client.holdSlot || !client.session) {
+        return { error: "החיבור לשרת לא נטען בעמוד." };
+      }
+      return client.session().then(function (result) {
+        if (generation !== holdGeneration) {
+          return null;
+        }
+        if (!result || !result.session) {
+          if (window.VIP_AUTH && window.VIP_AUTH.open) {
+            window.VIP_AUTH.open(function () {
+              if (generation !== holdGeneration) {
+                return;
+              }
+              holdBusy = false;
+              holdTarget = "";
+              selectSlot(slot);
+            }, "כדי לשמור את השעה צריך להתחבר.");
+          }
+          return { error: "כדי לשמור את השעה צריך להתחבר.", needsAuth: true };
+        }
+        return client.holdSlot({
+          adults: draft.adults,
+          children: draft.children,
+          beards: draft.beards,
+          date: draft.date,
+          time: slot
+        });
+      });
+    }).then(function (result) {
+      if (!result || generation !== holdGeneration) {
+        return;
+      }
+      holdBusy = false;
+      holdTarget = "";
+      if (result.needsAuth) {
+        holdReady = null;
+        sayCal(result.error);
+        render();
+        return;
+      }
+      if (result.error || !result.holdId || !result.expiresAt) {
+        holdReady = null;
+        clearHoldToken();
+        sayCal(result.error || "השעה לא נשמרה.");
+        refreshBusy();
+        return;
+      }
+      rememberHold(result.holdId);
+      holdReady = {
+        date: draft.date,
+        time: slot,
+        id: result.holdId,
+        expiresAt: result.expiresAt
+      };
+      sayCal("");
+      if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.start) {
+        window.VIP_HOLD_UI.start(result.expiresAt);
+      }
+      render();
+    }).catch(function () {
+      if (generation !== holdGeneration) {
+        return;
+      }
+      holdBusy = false;
+      holdTarget = "";
+      holdReady = null;
+      clearHoldToken();
+      sayCal("השעה לא נשמרה.");
+      render();
+    });
+  }
+
+  window.VIP_HOLD_LEAVE = function () {
+    dropHold();
+  };
+  window.VIP_HOLD_ON_EXPIRE = function () {
+    holdReady = null;
+    holdBusy = false;
+    holdTarget = "";
+    clearHoldToken();
+    sayCal("השמירה על השעה פגה. בחרו שעה מחדש.");
+    render();
+  };
+
+  var abandonHold = window.location.search.indexOf("hold=expired") !== -1 || window.location.search.indexOf("release=1") !== -1;
+  if (abandonHold) {
+    clearHoldToken();
+    if (window.VIP_SUPABASE && window.VIP_SUPABASE.releaseHold) {
+      releaseReady = window.VIP_SUPABASE.releaseHold().catch(function () {
+        return { error: "" };
+      });
+    }
+  }
+  holdChain = releaseReady;
+
+  function jerusalemClock(value) {
+    var date = new Date(value);
+    if (isNaN(date.getTime())) {
+      return "";
+    }
+    try {
+      var parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Jerusalem",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+      }).formatToParts(date);
+      var hour = "";
+      var minute = "";
+      parts.forEach(function (part) {
+        if (part.type === "hour") {
+          hour = part.value;
+        }
+        if (part.type === "minute") {
+          minute = part.value;
+        }
+      });
+      return hour && minute ? hour + ":" + minute : "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function sameDraftHold(hold) {
+    var expires = hold ? Date.parse(hold.expiresAt) : NaN;
+    return !!(hold && hold.id && hold.date === draft.date && String(hold.time || "").slice(0, 5) === draft.time && Number(hold.adults) === Number(draft.adults) && Number(hold.children) === Number(draft.children) && Number(hold.beards) === Number(draft.beards) && !isNaN(expires) && expires > Date.now());
+  }
+
+  function withoutOwnHold(rows, hold) {
+    return (rows || []).filter(function (row) {
+      var day = String(row.appointment_date || "").slice(0, 10);
+      return !(hold && day === hold.date && jerusalemClock(row.starts_at) === String(hold.time || "").slice(0, 5));
+    });
+  }
   if (continueButton) {
     continueButton.addEventListener("click", function () {
+      var people = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
+      var client = window.VIP_SUPABASE;
       if (!draft.date || !draft.time || !booking.enoughPeople(draft) || parse(draft.date) > bookUntil) {
         if (!booking.enoughPeople(draft)) {
           window.location.href = "booking.html";
@@ -984,37 +1254,125 @@
         return;
       }
       booking.write(draft);
-      window.location.href = "booking-details.html";
+      if (people > 5) {
+        window.location.href = "booking-details.html";
+        return;
+      }
+      if (holdBusy || !holdReady || holdReady.date !== draft.date || holdReady.time !== draft.time) {
+        sayCal(holdBusy ? "שומרים את השעה..." : "בחרו שעה פנויה כדי לשמור אותה.");
+        return;
+      }
+      if (!client || !client.currentHold) {
+        sayCal("החיבור לשרת לא נטען בעמוד.");
+        return;
+      }
+      continueButton.disabled = true;
+      client.currentHold().then(function (result) {
+        if (!holdIsCurrent(result && result.hold)) {
+          holdReady = null;
+          holdBusy = false;
+          clearHoldToken();
+          if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.stop) {
+            window.VIP_HOLD_UI.stop();
+          }
+          sayCal(result && result.error ? result.error : "השמירה על השעה פגה. בחרו שעה מחדש.");
+          render();
+          return;
+        }
+        window.location.href = "booking-details.html";
+      }).catch(function () {
+        sayCal("לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.");
+        render();
+      });
     });
   }
-  if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && schedule.applyRemote) {
+  function minutesOf(id) {
+    var found = null;
+    var services = window.VIP_DEMO && window.VIP_DEMO.services ? window.VIP_DEMO.services : [];
+    services.forEach(function (service) {
+      if (service.id === id && service.minutes !== null && service.minutes !== undefined && !isNaN(Number(service.minutes))) {
+        found = Number(service.minutes);
+      }
+    });
+    return found;
+  }
+
+  function failSchedule(text) {
+    schedule.fitVisit = false;
+    schedule.unavailable = true;
+    schedule.loadError = text;
+    render();
+  }
+
+  if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && window.VIP_SUPABASE.fetchCatalog && schedule.applyRemote) {
+    schedule.fitVisit = false;
     schedule.unavailable = true;
     schedule.loadError = "טוענים את השעות מהשרת.";
   }
   render();
-  if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && schedule.applyRemote) {
-    window.VIP_SUPABASE.fetchSchedule().then(function (result) {
-      if (!result || result.error || !result.schedule || !result.schedule.weekly || !result.schedule.weekly.length) {
-        schedule.unavailable = true;
-        schedule.loadError = result && result.error ? result.error : "לא ניתן לטעון את השעות מהשרת.";
-        render();
-        return null;
+  if (window.location.search.indexOf("hold=expired") !== -1) {
+    sayCal("השמירה על השעה פגה. בחרו שעה מחדש.");
+  } else if (window.location.search.indexOf("release=1") !== -1) {
+    sayCal("השמירה שוחררה. בחרו שעה מחדש.");
+  }
+  if (window.VIP_SUPABASE && window.VIP_SUPABASE.fetchSchedule && window.VIP_SUPABASE.fetchBusy && window.VIP_SUPABASE.fetchCatalog && schedule.applyRemote) {
+    var restoreGeneration = holdGeneration;
+    releaseReady.then(function () {
+      var jobs = [
+        window.VIP_SUPABASE.fetchSchedule(),
+        window.VIP_SUPABASE.fetchCatalog(),
+        window.VIP_SUPABASE.fetchBusy(iso(todayStart), iso(bookUntil))
+      ];
+      if (!abandonHold && (Number(draft.adults) || 0) + (Number(draft.children) || 0) <= 5 && window.VIP_SUPABASE.currentHold) {
+        jobs.push(window.VIP_SUPABASE.currentHold().catch(function () {
+          return { hold: null, error: "" };
+        }));
       }
-      return window.VIP_SUPABASE.fetchBusy(iso(todayStart), iso(bookUntil)).then(function (busy) {
-        if (!busy || busy.error) {
-          schedule.unavailable = true;
-          schedule.loadError = busy && busy.error ? busy.error : "לא ניתן לטעון את התורים התפוסים.";
-          render();
-          return null;
+      return Promise.all(jobs);
+    }).then(function (loaded) {
+      var result = loaded[0];
+      var catalog = loaded[1];
+      var busy = loaded[2];
+      if (!result || result.error || !result.schedule || !result.schedule.weekly || !result.schedule.weekly.length) {
+        failSchedule(result && result.error ? result.error : "לא ניתן לטעון את השעות מהשרת.");
+        return;
+      }
+      if (!catalog || catalog.error || !window.VIP_DEMO || !window.VIP_DEMO.applyServer || !catalog.rows || !catalog.rows.length) {
+        failSchedule(catalog && catalog.error ? catalog.error : "לא ניתן לטעון את משכי השירות מהשרת.");
+        return;
+      }
+      if (!busy || busy.error) {
+        failSchedule(busy && busy.error ? busy.error : "לא ניתן לטעון את התורים התפוסים.");
+        return;
+      }
+      window.VIP_DEMO.applyServer(catalog.rows);
+      if (minutesOf("mens-haircut") === null || minutesOf("kids-haircut") === null || minutesOf("beard") === null || typeof result.schedule.travelMinutes !== "number") {
+        failSchedule("לא ניתן לטעון את משכי השירות מהשרת.");
+        return;
+      }
+      schedule.fitVisit = true;
+      loadedSchedule = result.schedule;
+      var kept = restoreGeneration === holdGeneration && loaded[3] && loaded[3].hold && sameDraftHold(loaded[3].hold) ? loaded[3].hold : null;
+      schedule.applyRemote(result.schedule, kept ? withoutOwnHold(busy.rows, kept) : busy.rows);
+      if (kept && rememberHold(kept.id)) {
+        holdReady = {
+          date: kept.date,
+          time: String(kept.time || "").slice(0, 5),
+          id: kept.id,
+          expiresAt: kept.expiresAt
+        };
+        sayCal("");
+        if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.start) {
+          window.VIP_HOLD_UI.start(kept.expiresAt);
         }
-        schedule.applyRemote(result.schedule, busy.rows);
-        render();
-        return busy;
-      });
-    }).catch(function () {
-      schedule.unavailable = true;
-      schedule.loadError = "לא ניתן לטעון את השעות מהשרת.";
+      } else if (restoreGeneration === holdGeneration && !abandonHold && draft.time && (Number(draft.adults) || 0) + (Number(draft.children) || 0) <= 5) {
+        clearHoldToken();
+        holdReady = null;
+        sayCal("לחצו על השעה כדי לשמור אותה.");
+      }
       render();
+    }).catch(function () {
+      failSchedule("לא ניתן לטעון את השעות מהשרת.");
     });
   }
 })();
@@ -1029,6 +1387,10 @@
   }
 
   var draft = booking.read();
+  var partyCount = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
+  if (partyCount <= 5) {
+    window.VIP_SLOT_HOLD = { pending: true, id: "", matches: false, blocked: false, expired: false, retry: false, unverified: false, message: "" };
+  }
   var customer = draft.customer;
   if (window.location.search.indexOf("edit=1") !== -1 && draft.submitted && (draft.submitted.fullName || draft.submitted.phone)) {
     customer = draft.submitted;
@@ -1150,8 +1512,11 @@
       paymentError.textContent = touched.payment ? requirementError("payment", value) : "";
     }
     var ok = ready(value);
-    continueButton.disabled = !ok;
-    continueButton.setAttribute("aria-disabled", ok ? "false" : "true");
+    var holdState = window.VIP_SLOT_HOLD || {};
+    var holdOk = partyCount > 5 || (!!holdState.matches && !holdState.blocked && !holdState.pending);
+    var enabled = ok && holdOk;
+    continueButton.disabled = !enabled;
+    continueButton.setAttribute("aria-disabled", enabled ? "false" : "true");
   }
 
   function showPhoto(url) {
@@ -1260,8 +1625,12 @@
     showPhoto("");
   }
 
+  var detailsBusy = false;
   form.addEventListener("submit", function (event) {
     event.preventDefault();
+    if (detailsBusy) {
+      return;
+    }
     if (!booking.enoughPeople(draft)) {
       window.location.href = "booking.html";
       return;
@@ -1274,11 +1643,46 @@
     if (!ready(readFields())) {
       return;
     }
-    var approvalModal = document.getElementById("approval-modal");
-    if (approvalModal && approvalModal.showModal && !approvalModal.open) {
-      approvalModal.showModal();
+    function proceed() {
+      var approvalModal = document.getElementById("approval-modal");
+      if (approvalModal && approvalModal.showModal && !approvalModal.open) {
+        approvalModal.showModal();
+        return;
+      }
+      leaveForSummary();
+    }
+    if (partyCount > 5) {
+      proceed();
       return;
     }
+    if (!window.VIP_HOLD_UI || !window.VIP_HOLD_UI.confirm) {
+      var missing = document.getElementById("hold-status");
+      if (missing) {
+        missing.textContent = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+      }
+      continueButton.disabled = true;
+      return;
+    }
+    detailsBusy = true;
+    continueButton.disabled = true;
+    window.VIP_HOLD_UI.confirm().then(function (check) {
+      detailsBusy = false;
+      if (!check || !check.ok) {
+        paint();
+        return;
+      }
+      proceed();
+    }).catch(function () {
+      detailsBusy = false;
+      var failed = document.getElementById("hold-status");
+      if (failed) {
+        failed.textContent = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+      }
+      paint();
+    });
+  });
+
+  function leaveForSummary() {
     draft.submitted = readFields();
     draft.customer = {
       fullName: "",
@@ -1308,7 +1712,7 @@
     }
     form.reset();
     window.location.href = "booking-summary.html";
-  });
+  }
 
   var approvalContinue = document.getElementById("approval-continue");
   if (approvalContinue) {
@@ -1317,6 +1721,7 @@
     });
   }
 
+  window.VIP_HOLD_WATCH = paint;
   paint();
 })();
 
@@ -1439,13 +1844,72 @@
   var draft = booking.read();
   var modal = document.getElementById("sent-modal");
   var closeModal = document.getElementById("sent-close");
-
   var sendStatus = document.getElementById("send-status");
+  var people = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
+  var largeParty = people > 5;
 
   function saySend(text) {
     if (sendStatus) {
       sendStatus.textContent = text;
     }
+  }
+
+  function contactDigits() {
+    var owner = window.VIP_DEMO && window.VIP_DEMO.owner ? window.VIP_DEMO.owner : null;
+    return String(owner && owner.whatsappPhone ? owner.whatsappPhone : "972512177021").replace(/\D/g, "");
+  }
+
+  function contactLabel(digits) {
+    if (digits.indexOf("972") === 0 && digits.length === 12) {
+      return "+" + digits.slice(0, 3) + " " + digits.slice(3, 5) + "-" + digits.slice(5, 8) + "-" + digits.slice(8);
+    }
+    return "+" + digits;
+  }
+
+  if (largeParty) {
+    var panel = document.getElementById("large-party");
+    var whatsapp = document.getElementById("large-whatsapp");
+    var phoneLink = document.getElementById("large-phone");
+    var partyText = document.getElementById("large-party-text");
+    var contact = draft.submitted && (draft.submitted.fullName || draft.submitted.phone || draft.submitted.payment) ? draft.submitted : draft.customer;
+    var digits = contactDigits();
+    var lines = ["היי זאבי, אשמח לתאם ביקור לקבוצה:"];
+    lines.push("מבוגרים: " + (Number(draft.adults) || 0));
+    lines.push("ילדים: " + (Number(draft.children) || 0));
+    if (Number(draft.beards)) {
+      lines.push("זקן: " + Number(draft.beards));
+    }
+    if (draft.date) {
+      lines.push("תאריך: " + draft.date);
+    }
+    if (draft.time) {
+      lines.push("שעה: " + draft.time);
+    }
+    if (contact.fullName) {
+      lines.push("שם: " + contact.fullName);
+    }
+    if (contact.phone) {
+      lines.push("טלפון: " + contact.phone);
+    }
+    if (contact.city || contact.street) {
+      lines.push("כתובת: " + [contact.street, contact.houseNumber, contact.city].filter(Boolean).join(" "));
+    }
+    if (partyText) {
+      partyText.textContent = "לקבוצה של יותר מחמישה אנשים זאבי ישמח לתאם את הביקור אישית. אפשר לחזור ולבחור עד חמישה אנשים, או ליצור קשר עכשיו.";
+    }
+    if (whatsapp && digits) {
+      whatsapp.href = "https://wa.me/" + digits + "?text=" + encodeURIComponent(lines.join("\n"));
+    }
+    if (phoneLink && digits) {
+      phoneLink.href = "tel:+" + digits;
+      phoneLink.textContent = "טלפון: " + contactLabel(digits);
+    }
+    if (panel) {
+      panel.hidden = false;
+    }
+    button.hidden = true;
+  } else {
+    button.disabled = true;
   }
 
   button.addEventListener("click", function () {
@@ -1458,70 +1922,147 @@
     }
     draft = booking.read();
     customer = draft.submitted && (draft.submitted.fullName || draft.submitted.phone) ? draft.submitted : draft.customer;
+    if ((Number(draft.adults) || 0) + (Number(draft.children) || 0) > 5) {
+      saySend("לקבוצה של יותר מחמישה אנשים זאבי מתאם אישית. אפשר לפנות בטלפון או בוואטסאפ.");
+      return;
+    }
     if (!draft.date || !draft.time || !customer.fullName || !customer.phone || !customer.payment) {
       saySend("חסרים פרטים להזמנה. חזרו לשלב הפרטים.");
       return;
     }
-    if (!auth || !auth.whenReady) {
+    var watched = window.VIP_SLOT_HOLD || {};
+    if (watched.pending) {
+      saySend("בודקים את השמירה על השעה.");
+      return;
+    }
+    if (!watched.unverified && (!watched.matches || watched.blocked || watched.expired)) {
+      saySend(watched.message || "השמירה על השעה פגה. בחרו שעה מחדש.");
+      button.disabled = true;
+      return;
+    }
+    if (!auth || !auth.whenReady || !auth.requestAppointment) {
       saySend("החיבור לשרת לא נטען בעמוד.");
       return;
     }
-    button.disabled = true;
-    saySend("שולחים את הבקשה...");
-    try {
-      photo = sessionStorage.getItem(booking.sentPhotoKey) || "";
-    } catch (error) {
-      photo = "";
+    if (!window.VIP_HOLD_UI || !window.VIP_HOLD_UI.confirm) {
+      saySend("לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.");
+      button.disabled = true;
+      return;
     }
-    auth.whenReady().then(function (ready) {
-      if (!ready) {
-        return { id: "", error: "החיבור לשרת לא נטען בעמוד." };
-      }
-      return auth.session();
-    }).then(function (result) {
-      if (result && result.error && !result.session) {
-        return { id: "", error: result.error };
-      }
-      if (!result || !result.session) {
-        button.disabled = false;
-        saySend("");
-        if (window.VIP_AUTH && window.VIP_AUTH.open) {
-          window.VIP_AUTH.open(function () {
-            button.click();
-          }, result && result.error ? result.error : "כדי לשלוח את הבקשה צריך להתחבר או להירשם.");
-        } else {
-          saySend("כדי לשלוח את הבקשה צריך להתחבר או להירשם. הפרטים נשארים בעמוד.");
+    button.disabled = true;
+    saySend("בודקים את השמירה על השעה.");
+    window.VIP_HOLD_UI.confirm().then(function (check) {
+      if (!check || !check.ok || !check.hold || !check.hold.id) {
+        var expiredText = check && check.error ? check.error : "השמירה על השעה פגה. בחרו שעה מחדש.";
+        saySend(expiredText);
+        button.disabled = true;
+        if (expiredText.indexOf("פגה") !== -1) {
+          window.location.href = "booking-next.html?hold=expired";
+          return { id: "", skipped: true };
+        }
+        if (expiredText.indexOf("להתחבר") !== -1) {
+          button.disabled = false;
+          if (window.VIP_AUTH && window.VIP_AUTH.open) {
+            window.VIP_AUTH.open(function () {
+              button.click();
+            }, expiredText);
+          }
         }
         return { id: "", skipped: true };
       }
-      return auth.requestAppointment({
-        adults: draft.adults,
-        children: draft.children,
-        beards: draft.beards,
-        date: draft.date,
-        time: draft.time,
-        fullName: customer.fullName,
-        phone: customer.phone,
-        city: customer.city,
-        street: customer.street,
-        houseNumber: customer.houseNumber,
-        entrance: customer.entrance,
-        floor: customer.floor,
-        apartment: customer.apartment,
-        entryCode: customer.entryCode,
-        notes: customer.notes,
-        payment: customer.payment
+      var activeHoldId = check.hold.id;
+      if (Date.parse(check.hold.expiresAt) <= Date.now()) {
+        saySend("השמירה על השעה פגה. בחרו שעה מחדש.");
+        button.disabled = true;
+        window.location.href = "booking-next.html?hold=expired";
+        return { id: "", skipped: true };
+      }
+      window.VIP_SENDING = true;
+      saySend("שולחים את הבקשה...");
+      try {
+        photo = sessionStorage.getItem(booking.sentPhotoKey) || "";
+      } catch (error) {
+        photo = "";
+      }
+      return auth.whenReady().then(function (ready) {
+        if (!ready) {
+          return { id: "", error: "החיבור לשרת לא נטען בעמוד." };
+        }
+        return auth.session();
+      }).then(function (result) {
+        if (result && result.error && !result.session) {
+          return { id: "", error: result.error };
+        }
+        if (!result || !result.session) {
+          window.VIP_SENDING = false;
+          button.disabled = false;
+          saySend("");
+          if (window.VIP_AUTH && window.VIP_AUTH.open) {
+            window.VIP_AUTH.open(function () {
+              button.click();
+            }, result && result.error ? result.error : "כדי לשלוח את הבקשה צריך להתחבר או להירשם.");
+          } else {
+            saySend("כדי לשלוח את הבקשה צריך להתחבר או להירשם. הפרטים נשארים בעמוד.");
+          }
+          return { id: "", skipped: true };
+        }
+        return auth.requestAppointment({
+          adults: draft.adults,
+          children: draft.children,
+          beards: draft.beards,
+          date: draft.date,
+          time: draft.time,
+          fullName: customer.fullName,
+          phone: customer.phone,
+          city: customer.city,
+          street: customer.street,
+          houseNumber: customer.houseNumber,
+          entrance: customer.entrance,
+          floor: customer.floor,
+          apartment: customer.apartment,
+          entryCode: customer.entryCode,
+          notes: customer.notes,
+          payment: customer.payment,
+          holdId: activeHoldId
+        });
       });
     }).then(function (result) {
       if (result && result.skipped) {
         return;
       }
-      button.disabled = false;
+      window.VIP_SENDING = false;
       if (!result || result.error || !result.id) {
-        saySend(result && result.error ? result.error : "הבקשה לא נשמרה.");
+        var failure = result && result.error ? result.error : "הבקשה לא נשמרה.";
+        saySend(failure);
+        if (failure.indexOf("פגה") !== -1) {
+          button.disabled = true;
+          try {
+            sessionStorage.removeItem("vip-hold-id");
+          } catch (error) {
+            failure = failure;
+          }
+          if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.stop) {
+            window.VIP_HOLD_UI.stop();
+          }
+          window.location.href = "booking-next.html?hold=expired";
+          return;
+        }
+        button.disabled = false;
         return;
       }
-      if (window.VIP_ORDERS) {
+      try {
+        sessionStorage.removeItem("vip-hold-id");
+        sessionStorage.setItem("vip-hold-converted", "1");
+      } catch (error) {
+        window.VIP_HOLD_CONVERTED = true;
+      }
+      window.VIP_HOLD_CONVERTED = true;
+      if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.stop) {
+        window.VIP_HOLD_UI.stop();
+      }
+      if (window.VIP_ORDERS && !window.VIP_ORDERS.read().some(function (item) {
+        return item.serverId === result.id;
+      })) {
         window.VIP_ORDERS.add({
           fromServer: true,
           serverId: result.id,
@@ -1540,6 +2081,7 @@
         modal.showModal();
       }
     }).catch(function () {
+      window.VIP_SENDING = false;
       button.disabled = false;
       saySend("הבקשה לא נשמרה.");
     });
@@ -2606,4 +3148,337 @@
     return;
   }
   offerAfterInstall();
+})();
+
+(function () {
+  "use strict";
+
+  if (document.body.classList.contains("admin")) {
+    return;
+  }
+  var file = window.location.pathname.split("/").pop() || "";
+  var booking = window.VIP_BOOKING;
+  var auth = window.VIP_SUPABASE;
+
+  function clearToken() {
+    try {
+      sessionStorage.removeItem("vip-hold-id");
+    } catch (error) {
+      return;
+    }
+  }
+
+  function remember(id) {
+    try {
+      if (id) {
+        sessionStorage.setItem("vip-hold-id", id);
+      } else {
+        sessionStorage.removeItem("vip-hold-id");
+      }
+    } catch (error) {
+      return;
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    var node = event.target;
+    var link = null;
+    var raw = "";
+    var path = "";
+    var name = "";
+    var converted = false;
+    while (node && node !== document) {
+      if (node.tagName === "A") {
+        link = node;
+        break;
+      }
+      node = node.parentNode;
+    }
+    if (!link) {
+      return;
+    }
+    raw = link.getAttribute("href") || "";
+    if (!raw || raw.indexOf("mailto:") === 0 || raw.indexOf("tel:") === 0 || raw.indexOf("http") === 0) {
+      return;
+    }
+    path = raw.split("#")[0].split("?")[0];
+    name = path.split("/").pop();
+    if (name !== "index.html" && name !== "orders.html" && name !== "booking.html" && name !== "booking-next.html") {
+      return;
+    }
+    if (name === "booking-next.html" && file === "booking-next.html") {
+      return;
+    }
+    try {
+      converted = !!window.VIP_HOLD_CONVERTED || sessionStorage.getItem("vip-hold-converted") === "1";
+    } catch (error) {
+      converted = !!window.VIP_HOLD_CONVERTED;
+    }
+    if (converted) {
+      return;
+    }
+    clearToken();
+    if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.stop) {
+      window.VIP_HOLD_UI.stop();
+    }
+    if (window.VIP_HOLD_LEAVE) {
+      window.VIP_HOLD_LEAVE();
+      return;
+    }
+    if (auth && auth.releaseHold) {
+      auth.releaseHold();
+    }
+  });
+
+  if (file === "booking.html" || file === "index.html" || file === "orders.html") {
+    var converted = false;
+    try {
+      converted = sessionStorage.getItem("vip-hold-converted") === "1";
+      sessionStorage.removeItem("vip-hold-converted");
+    } catch (error) {
+      converted = false;
+    }
+    if (!converted) {
+      clearToken();
+      if (auth && auth.releaseHold) {
+        auth.releaseHold();
+      }
+    }
+    return;
+  }
+  if ((file !== "booking-details.html" && file !== "booking-summary.html" && file !== "booking-next.html") || !booking) {
+    return;
+  }
+
+  var draft = booking.read();
+  var people = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
+  var status = document.getElementById("hold-status") || document.getElementById("send-status");
+  var sendButton = document.getElementById("send-request");
+  var timer = document.createElement("div");
+  var face = document.createElement("span");
+  var tick = 0;
+  var expiresMs = 0;
+
+  timer.className = "hold-timer";
+  timer.hidden = true;
+  timer.setAttribute("role", "timer");
+  timer.setAttribute("aria-label", "זמן השמירה על השעה");
+  timer.appendChild(face);
+  document.body.appendChild(timer);
+
+  var clockGeneration = 0;
+
+  function stopClock() {
+    clockGeneration += 1;
+    if (tick) {
+      window.clearInterval(tick);
+      tick = 0;
+    }
+    timer.hidden = true;
+  }
+
+  function setStatus(text) {
+    if (window.VIP_SENDING) {
+      return;
+    }
+    if (status) {
+      status.textContent = text || "";
+    }
+  }
+
+  function showReselect(expired) {
+    var link = document.getElementById("hold-reselect");
+    if (file === "booking-next.html") {
+      return;
+    }
+    if (!link) {
+      link = document.createElement("a");
+      link.id = "hold-reselect";
+      link.className = "btn btn--ghost";
+      link.textContent = "לבחירת שעה מחדש";
+      if (status && status.parentNode) {
+        status.parentNode.insertBefore(link, status.nextSibling);
+      }
+    }
+    link.href = expired ? "booking-next.html?hold=expired" : "booking-next.html?release=1";
+  }
+
+  function publish(state) {
+    var nextButton = document.getElementById("details-continue");
+    var approvalButton = document.getElementById("approval-continue");
+    var allow = !!(state.matches && !state.blocked && !state.pending && !state.expired);
+    window.VIP_SLOT_HOLD = state;
+    if (sendButton && !sendButton.hidden && !window.VIP_SENDING) {
+      sendButton.disabled = !allow;
+    }
+    if (state.blocked || state.expired) {
+      if (nextButton) {
+        nextButton.disabled = true;
+      }
+      if (approvalButton) {
+        approvalButton.disabled = true;
+      }
+    }
+    if (typeof window.VIP_HOLD_WATCH === "function") {
+      window.VIP_HOLD_WATCH();
+    }
+  }
+
+  function pad(number) {
+    return number < 10 ? "0" + number : String(number);
+  }
+
+  function expireHold() {
+    clearToken();
+    stopClock();
+    setStatus("השמירה על השעה פגה. בחרו שעה מחדש.");
+    showReselect(true);
+    publish({
+      pending: false,
+      id: "",
+      matches: false,
+      blocked: true,
+      expired: true,
+      retry: false,
+      unverified: false,
+      message: "השמירה על השעה פגה. בחרו שעה מחדש."
+    });
+    if (file === "booking-next.html" && typeof window.VIP_HOLD_ON_EXPIRE === "function") {
+      window.VIP_HOLD_ON_EXPIRE();
+    }
+  }
+
+  function paint(generation) {
+    var seconds = Math.ceil((expiresMs - Date.now()) / 1000);
+    if (generation !== clockGeneration) {
+      return;
+    }
+    if (seconds <= 0) {
+      expireHold();
+      return;
+    }
+    face.textContent = pad(Math.floor(seconds / 60)) + ":" + pad(seconds % 60);
+    timer.classList.toggle("is-late", seconds < 60);
+    timer.hidden = false;
+  }
+
+  function startClock(value) {
+    var parsed = Date.parse(value);
+    var generation;
+    if (isNaN(parsed)) {
+      return;
+    }
+    generation = ++clockGeneration;
+    expiresMs = parsed;
+    if (tick) {
+      window.clearInterval(tick);
+      tick = 0;
+    }
+    paint(generation);
+    if (generation !== clockGeneration) {
+      return;
+    }
+    tick = window.setInterval(function () {
+      paint(generation);
+    }, 250);
+  }
+
+  function same(hold) {
+    return !!(hold && hold.date === draft.date && hold.time === String(draft.time || "").slice(0, 5) && Number(hold.adults) === Number(draft.adults) && Number(hold.children) === Number(draft.children) && Number(hold.beards) === Number(draft.beards));
+  }
+
+  function fresh(hold) {
+    var expires = hold ? Date.parse(hold.expiresAt) : NaN;
+    return same(hold) && !isNaN(expires) && expires > Date.now();
+  }
+
+  function confirm() {
+    if (!auth || !auth.currentHold || !auth.session) {
+      return Promise.resolve({ ok: false, error: "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע." });
+    }
+    return auth.session().then(function (sessionResult) {
+      if (!sessionResult || !sessionResult.session) {
+        return { hold: null, error: "צריך להתחבר לפני שליחת ההזמנה." };
+      }
+      return auth.currentHold();
+    }).then(function (result) {
+      var message = "";
+      if (result && result.error && result.error.indexOf("להתחבר") !== -1) {
+        setStatus(result.error);
+        publish({ pending: false, id: "", matches: false, blocked: false, expired: false, retry: false, unverified: true, message: result.error });
+        return { ok: false, error: result.error };
+      }
+      if (!result || result.error) {
+        message = result && result.error ? result.error : "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+        setStatus(message);
+        publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: true, message: message });
+        return { ok: false, error: message };
+      }
+      if (result.hold && !same(result.hold)) {
+        clearToken();
+        stopClock();
+        message = "השמירה לא תואמת את השעה שנבחרה. בחרו שעה מחדש.";
+        setStatus(message);
+        showReselect(false);
+        publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: false, message: message });
+        if (auth.releaseHold) {
+          auth.releaseHold();
+        }
+        return { ok: false, error: message };
+      }
+      if (!fresh(result.hold)) {
+        clearToken();
+        stopClock();
+        message = "השמירה על השעה פגה. בחרו שעה מחדש.";
+        setStatus(message);
+        showReselect(true);
+        publish({ pending: false, id: "", matches: false, blocked: true, expired: true, retry: false, unverified: false, message: message });
+        return { ok: false, error: message };
+      }
+      remember(result.hold.id);
+      setStatus("");
+      startClock(result.hold.expiresAt);
+      publish({ pending: false, id: result.hold.id, matches: true, blocked: false, expired: false, retry: false, unverified: false, message: "" });
+      return { ok: true, hold: result.hold };
+    }).catch(function () {
+      var message = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+      setStatus(message);
+      publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: true, message: message });
+      return { ok: false, error: message };
+    });
+  }
+
+  window.VIP_HOLD_UI = {
+    stop: stopClock,
+    start: function (value) {
+      if (people > 5) {
+        return;
+      }
+      startClock(value);
+    },
+    confirm: confirm
+  };
+
+  if (people > 5) {
+    clearToken();
+    stopClock();
+    publish({ pending: false, id: "", matches: false, blocked: false, expired: false, retry: false, unverified: false, message: "" });
+    if (auth && auth.releaseHold) {
+      auth.releaseHold();
+    }
+    return;
+  }
+
+  if (file === "booking-next.html") {
+    return;
+  }
+
+  publish({ pending: true, id: "", matches: false, blocked: false, expired: false, retry: false, unverified: false, message: "" });
+  if (!auth || !auth.currentHold) {
+    var missing = "לא ניתן לאמת את השמירה על השעה. נסו שוב בעוד רגע.";
+    setStatus(missing);
+    publish({ pending: false, id: "", matches: false, blocked: true, expired: false, retry: false, unverified: true, message: missing });
+    return;
+  }
+  confirm();
 })();
