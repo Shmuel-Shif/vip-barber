@@ -1022,18 +1022,63 @@ body.nav-open {
 }
 
 .order-card {
+  display: grid;
+  gap: 0;
   width: min(100%, 36rem);
-  margin: 0.75rem auto 0;
-  padding: 0.85rem 0.95rem;
+  margin: 0.55rem auto 0;
+  padding: 0.55rem 0.7rem 0.65rem;
   border: 1px solid rgba(196, 164, 106, 0.55);
   border-radius: 0.9rem;
   background: rgba(196, 164, 106, 0.06);
 }
 
-.order-card p {
-  margin: 0.35rem 0 0;
-  font-size: 0.95rem;
-  line-height: 1.45;
+.order-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
+.order-card__remove {
+  flex: 0 0 auto;
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gold-light);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.order-card__row {
+  display: grid;
+  grid-template-columns: 4.4rem minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.28rem 0;
+  border-top: 1px solid rgba(196, 164, 106, 0.22);
+  line-height: 1.35;
+}
+
+.order-card__label {
+  color: var(--gold-light);
+  font-size: 0.8rem;
+}
+
+.order-card__value {
+  min-width: 0;
+  color: var(--ivory);
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.orders-page h1[hidden],
+#orders-intro[hidden] {
+  display: none;
 }
 
 .order-card__status {
@@ -1062,22 +1107,18 @@ body.nav-open {
 
 .order-card__approve,
 .order-card__cancel {
-  width: auto;
-  min-height: 2.4rem;
-  margin-top: 0.75rem;
-  padding: 0.4rem 1rem;
-}
-
-.order-card__cancel {
   width: 100%;
-  min-height: 2.75rem;
+  min-width: 0;
+  min-height: 2.4rem;
+  margin-top: 0.45rem;
+  padding: 0.35rem 0.8rem;
 }
 
-.orders-lock {
-  margin: 0.7rem 0 0;
+.order-card .orders-lock {
+  margin: 0.4rem 0 0;
   color: var(--ivory-soft);
-  font-size: 0.92rem;
-  line-height: 1.45;
+  font-size: 0.86rem;
+  line-height: 1.35;
 }
 
 #orders-feedback:empty {
@@ -2185,6 +2226,18 @@ body:has(.summary) {
   background: rgba(0, 0, 0, 0.72);
 }
 
+.auth-modal::backdrop {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.auth-hint {
+  margin: 0.35rem 0 0;
+  color: var(--gold-light);
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .sent-modal h2 {
   margin: 0;
   color: var(--gold-light);
@@ -2234,6 +2287,14 @@ body:has(.summary) {
 
   .details__pair .field {
     margin-top: 0.85rem;
+  }
+}
+
+@media (min-width: 720px) {
+  .order-card {
+    width: min(100%, 34rem);
+    margin-inline: 0;
+    padding: 0.65rem 0.85rem 0.75rem;
   }
 }
 
@@ -2725,15 +2786,35 @@ body.admin .admin-login__secret input {
 }
 
 .admin-login__secret button {
-  flex: 0 0 auto;
-  min-width: 4.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 2.85rem;
+  width: 2.85rem;
   min-height: 2.85rem;
+  padding: 0;
   border: 0;
-  border-inline-start: 1px solid rgba(196, 164, 106, 0.4);
   background: transparent;
   color: var(--gold-light);
-  font: inherit;
   cursor: pointer;
+}
+
+.admin-login__secret button .eye-shut {
+  display: none;
+}
+
+.admin-login__secret button[aria-pressed="true"] .eye-open {
+  display: none;
+}
+
+.admin-login__secret button[aria-pressed="true"] .eye-shut {
+  display: block;
+}
+
+.admin-login .btn {
+  display: flex;
+  width: 100%;
+  margin-top: 1rem;
 }
 
 .admin-login__error {
@@ -2745,10 +2826,6 @@ body.admin .admin-login__secret input {
   color: #f3d2cb;
   line-height: 1.5;
   text-align: right;
-}
-
-.admin-login .btn {
-  margin-top: 1rem;
 }
 
 .admin-dev-exit {
@@ -2843,19 +2920,52 @@ body.admin .admin-day-nav button {
 }
 
 body.admin .admin-tools {
-  display: grid;
-  gap: 0.65rem;
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
   margin-top: 1rem;
 }
 
-body.admin .admin-tools label {
+body.admin .admin-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 0.75rem;
+  background: #111;
+  color: var(--gold-light);
+  line-height: 1;
+  cursor: pointer;
+}
+
+body.admin .admin-tool[aria-expanded="true"],
+body.admin .admin-tool.is-set {
+  border-color: var(--gold-light);
+  background: rgba(196, 164, 106, 0.16);
+}
+
+body.admin .admin-tool-panel {
   display: grid;
   gap: 0.3rem;
+  margin-top: 0.55rem;
   color: var(--ivory-soft);
 }
 
-body.admin .admin-tools input,
-body.admin .admin-tools select {
+body.admin .admin-tool-panel[hidden] {
+  display: none;
+}
+
+body.admin .admin-tools label,
+body.admin .admin-tool-panel {
+  color: var(--ivory-soft);
+}
+
+body.admin .admin-tool-panel input,
+body.admin .admin-tool-panel select {
   width: 100%;
   min-height: 2.75rem;
   border: 1px solid rgba(196, 164, 106, 0.55);
@@ -2864,6 +2974,36 @@ body.admin .admin-tools select {
   color: var(--ivory);
   padding-inline: 0.7rem;
   font: inherit;
+}
+
+body.admin .admin-setcard {
+  margin-top: 0.7rem;
+  border: 1px solid rgba(196, 164, 106, 0.45);
+  border-radius: 0.9rem;
+  background: rgba(196, 164, 106, 0.05);
+}
+
+body.admin .admin-setcard__toggle {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.85rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--ivory);
+  font: inherit;
+  line-height: 1.45;
+  text-align: right;
+  cursor: pointer;
+}
+
+body.admin .admin-setcard__name {
+  color: var(--gold-light);
+}
+
+body.admin .admin-setcard__body {
+  padding: 0 1rem 1rem;
 }
 
 body.admin .admin-compact {
@@ -2891,6 +3031,8 @@ body.admin .admin-compact.is-cancelled {
 }
 
 body.admin .admin-compact__toggle {
+  display: grid;
+  gap: 0.2rem;
   width: 100%;
   min-height: 2.75rem;
   padding: 0;
@@ -2898,9 +3040,54 @@ body.admin .admin-compact__toggle {
   background: transparent;
   color: var(--ivory);
   font: inherit;
-  line-height: 1.45;
+  line-height: 1.4;
   text-align: right;
   cursor: pointer;
+}
+
+body.admin .admin-compact__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+body.admin .admin-compact__when,
+body.admin .admin-compact__phone {
+  color: var(--ivory-soft);
+  font-size: 0.9rem;
+}
+
+body.admin .admin-compact__name {
+  font-size: 1.05rem;
+}
+
+body.admin .admin-compact__status {
+  flex: 0 0 auto;
+  padding: 0.12rem 0.55rem;
+  border: 1px solid rgba(196, 164, 106, 0.55);
+  border-radius: 999px;
+  color: var(--gold-light);
+  font-size: 0.8rem;
+}
+
+body.admin .admin-detail {
+  display: grid;
+  grid-template-columns: 5.6rem minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: start;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(196, 164, 106, 0.24);
+}
+
+body.admin .admin-detail__label {
+  color: var(--gold-light);
+  font-size: 0.86rem;
+}
+
+body.admin .admin-detail__value {
+  color: var(--ivory);
+  overflow-wrap: anywhere;
 }
 
 body.admin .admin-compact__body p,
@@ -2927,7 +3114,7 @@ body.admin .admin-compact img {
   }
 
   body.admin .admin-tools {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 22rem;
   }
 }
 
@@ -2948,6 +3135,87 @@ main,
   width: auto;
   max-width: 7.5rem;
   height: 3.15rem;
+}
+
+.header-user {
+  min-width: 0;
+  max-width: 8rem;
+  overflow: hidden;
+  color: var(--gold-light);
+  font-size: 0.95rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.header-auth {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  min-height: 2.15rem;
+  padding: 0.2rem 0.75rem;
+  border: 1px solid rgba(196, 164, 106, 0.75);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gold-light);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+body.home .header-user {
+  max-width: 4.8rem;
+  font-size: 0.78rem;
+}
+
+body.home .header-auth {
+  min-height: 1.85rem;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.auth-modal .field {
+  margin-top: 0.75rem;
+  text-align: right;
+}
+
+.auth-modal .btn {
+  width: 100%;
+  min-width: 0;
+  margin-top: 0.7rem;
+}
+
+.auth-secret {
+  position: relative;
+}
+
+.auth-secret input {
+  width: 100%;
+  padding-inline-end: 2.7rem;
+}
+
+.auth-secret button {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: 0.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gold-light);
+  cursor: pointer;
+}
+
+.auth-secret button .eye-shut,
+.auth-secret button[aria-pressed="true"] .eye-open {
+  display: none;
+}
+
+.auth-secret button[aria-pressed="true"] .eye-shut {
+  display: block;
 }
 
 #account-form {

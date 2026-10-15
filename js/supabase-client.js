@@ -21,7 +21,8 @@
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true
+        detectSessionInUrl: false,
+        storage: window.localStorage
       }
     });
   }
@@ -203,7 +204,7 @@
   function withClient(task) {
     return whenReady().then(function (ready) {
       if (!ready) {
-        return { data: null, error: "Supabase לא נטען בדף." };
+        return { data: null, error: "אין חיבור." };
       }
       return task(ready);
     });
@@ -225,7 +226,7 @@
       if (!result.session || !client) {
         return { profile: null, session: result.session, error: result.error };
       }
-      return client.from("profiles").select("role, full_name, phone").eq("id", result.session.user.id).maybeSingle().then(function (profileResult) {
+      return client.from("profiles").select("role, full_name, phone, username").eq("id", result.session.user.id).maybeSingle().then(function (profileResult) {
         if (profileResult.error) {
           return { profile: null, session: result.session, error: messageFor(profileResult.error) };
         }
@@ -354,6 +355,14 @@
         });
       });
     },
+    watchAuth: function (handler) {
+      return withClient(function (ready) {
+        var watched = ready.auth.onAuthStateChange(function (event, session) {
+          handler(event, session || null);
+        });
+        return watched;
+      });
+    },
     requestAppointment: function (fields) {
       return withClient(function (ready) {
         var clock = String(fields.time || "");
@@ -441,6 +450,21 @@
             },
             error: ""
           };
+        });
+      });
+    },
+    saveTravel: function (minutes) {
+      return withClient(function (ready) {
+        return ready.from("business_settings").update({
+          travel_minutes: minutes
+        }).eq("id", true).select("travel_minutes").then(function (result) {
+          if (result.error) {
+            return { error: messageFor(result.error) };
+          }
+          if (!result.data || !result.data.length) {
+            return { error: "הפעולה הזו שמורה לחשבון האדמין." };
+          }
+          return { error: "" };
         });
       });
     },

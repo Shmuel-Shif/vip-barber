@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#070707">
-  <meta name="description" content="מסך התחברות לעיצוב אזור הניהול של זאבי הנאו. אין כאן אימות מאובטח עד חיבור השרת.">
+  <meta name="description" content="אזור הניהול של זאבי הנאו.">
   <title>ניהול — זאבי הנאו - VIP</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" type="image/png">
@@ -29,59 +29,99 @@
     <section class="admin-login" id="admin-login" aria-labelledby="admin-login-title">
       <img class="admin-login__logo" src="assets/logo/logo.png" alt="לוגו VIP" width="1090" height="1183">
       <h1 id="admin-login-title">אזור הניהול</h1>
-      <p class="admin-login__note">ההתחברות נבדקת בשרת. רק חשבון שהוגדר כאדמין נכנס. אין הרשמה לאדמין מהמסך הזה.</p>
-      <form id="admin-login-form" method="post" action="admin.html" autocomplete="on" novalidate onsubmit="return false">
+      <p class="admin-login__note">רק חשבון שהוגדר כאדמין נכנס. אין הרשמה לאדמין מהמסך הזה.</p>
+      <form id="admin-login-form" method="post" action="admin.html" autocomplete="off" novalidate onsubmit="return false">
         <label class="admin-field" for="admin-username">שם משתמש
-          <input id="admin-username" name="username" type="text" maxlength="24" autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next">
+          <input id="admin-username" name="vip-admin-user" type="text" maxlength="24" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="next">
         </label>
         <div class="admin-field">
           <label for="admin-password">סיסמה</label>
           <div class="admin-login__secret">
-            <input id="admin-password" name="password" type="password" maxlength="200" autocomplete="off" spellcheck="false" enterkeyhint="done">
-            <button type="button" id="admin-password-toggle" aria-controls="admin-password" aria-pressed="false" aria-label="הצגת הסיסמה">הצגה</button>
+            <input id="admin-password" name="vip-admin-pass" type="password" maxlength="200" autocomplete="new-password" spellcheck="false" enterkeyhint="done">
+            <button type="button" id="admin-password-toggle" aria-controls="admin-password" aria-pressed="false" aria-label="הצגת הסיסמה">
+              <svg class="eye-open" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <path d="M2.2 12S5.8 6.2 12 6.2 21.8 12 21.8 12 18.2 17.8 12 17.8 2.2 12 2.2 12z" fill="none" stroke="currentColor" stroke-width="1.6"></path>
+                <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+              </svg>
+              <svg class="eye-shut" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <path d="M3 3.5l18 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                <path d="M10.4 6.4A11 11 0 0 1 12 6.2c6.2 0 9.8 5.8 9.8 5.8a18 18 0 0 1-3.3 3.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                <path d="M6.2 8.3A18 18 0 0 0 2.2 12S5.8 17.8 12 17.8a11 11 0 0 0 4.1-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+                <path d="M9.8 10a2.5 2.5 0 0 0 3.5 3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+              </svg>
+            </button>
           </div>
         </div>
         <p id="admin-login-error" class="admin-login__error" role="alert" hidden></p>
         <button type="submit" class="btn btn--gold" id="admin-login-submit">התחברות</button>
       </form>
-      <button type="button" class="btn btn--ghost" id="admin-dev-open">כניסה זמנית לפיתוח</button>
-      <p class="admin-login__note">בלי שם משתמש ובלי סיסמה. זה לא אימות ולא אבטחה, רק כדי להמשיך לפתח עד חיבור Supabase.</p>
       <noscript>
-        <p class="admin-login__note">כדי להציג את המסך צריך לאפשר JavaScript. אין כאן התחברות לשרת.</p>
+        <p class="admin-login__note">כדי להציג את המסך צריך לאפשר JavaScript.</p>
       </noscript>
     </section>
     <div id="admin-app" hidden>
     <nav class="admin-nav" aria-label="ניווט ניהול">
-      <button type="button" data-admin-panel="hours">שעות פעילות</button>
       <button type="button" data-admin-panel="day">הלוז היומי שלי</button>
       <button type="button" data-admin-panel="orders">כל ההזמנות</button>
       <button type="button" data-admin-panel="pending">ממתינות לאישור</button>
       <button type="button" data-admin-panel="settings">הגדרות</button>
     </nav>
 
-    <section class="admin-panel" data-admin-section="hours" hidden aria-labelledby="hours-title">
-      <h1 id="hours-title">שעות פעילות</h1>
-      <p class="admin-note">השעות הקבועות חוזרות בכל שבוע. שבוע אחד אפשר לשנות בלי לשנות את השאר. חשבון אדמין שומר את השעות ואת חריגי התאריך בשרת. כניסה זמנית לפיתוח נשארת במכשיר הזה. תורים שכבר נקבעו לא מבוטלים.</p>
-      <div class="admin-filters" id="hours-mode">
-        <button type="button" id="hours-standing" aria-pressed="true">שעות קבועות</button>
-        <button type="button" id="hours-week" aria-pressed="false">שבוע שנבחר</button>
-      </div>
-      <p id="hours-scope" class="admin-note"></p>
-      <div class="cal__nav admin-day-nav" id="week-nav" hidden>
-        <button type="button" id="week-prev">שבוע קודם</button>
-        <h2 id="week-label"></h2>
-        <button type="button" id="week-next">שבוע הבא</button>
-      </div>
-      <div id="week-days" class="admin-hours"></div>
-      <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השעות הקבועות</button>
-      <button type="button" class="btn btn--ghost" id="week-clear" hidden>ביטול השינוי החריג</button>
-      <p id="week-status" class="admin-feedback" role="status"></p>
-      <div id="week-conflicts" class="admin-conflicts"></div>
+    <section class="admin-panel" data-admin-section="settings" hidden aria-labelledby="settings-title">
+      <h1 id="settings-title">הגדרות</h1>
+      <article class="admin-setcard">
+        <button type="button" class="admin-setcard__toggle" id="settings-toggle" aria-expanded="false" aria-controls="settings-body">
+          <span class="admin-setcard__name">תפריט מחירים וזמן</span>
+        </button>
+        <div class="admin-setcard__body" id="settings-body" hidden>
+          <form id="business-form">
+            <label class="admin-field">זמן תספורת לכולם, בדקות
+              <input id="biz-cut" name="cut" type="number" min="10" max="180" step="5" inputmode="numeric" required>
+            </label>
+            <label class="admin-field">זמן נסיעה, בדקות
+              <input id="biz-travel" name="travel" type="number" min="0" max="180" step="5" inputmode="numeric" required>
+            </label>
+            <label class="admin-field">מחיר תספורת גברים, בשקלים
+              <input data-service="mens-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
+            </label>
+            <label class="admin-field">מחיר תספורת ילדים, בשקלים
+              <input data-service="kids-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
+            </label>
+            <label class="admin-field">מחיר סידור זקן, בשקלים
+              <input data-service="beard" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
+            </label>
+            <button type="submit" class="btn btn--gold admin-save">שמירת זמנים ומחירים</button>
+            <p id="biz-status" class="admin-feedback" role="status"></p>
+          </form>
+        </div>
+      </article>
+      <article class="admin-setcard">
+        <button type="button" class="admin-setcard__toggle" id="hours-toggle" aria-expanded="false" aria-controls="hours-body">
+          <span class="admin-setcard__name">שעות פעילות</span>
+        </button>
+        <div class="admin-setcard__body" id="hours-body" hidden>
+          <p class="admin-note">השעות הקבועות חוזרות בכל שבוע. שבת סגורה. שבוע אחד אפשר לשנות בלי לשנות את השאר. תורים שכבר נקבעו לא מבוטלים.</p>
+          <div class="admin-filters" id="hours-mode">
+            <button type="button" id="hours-standing" aria-pressed="true">שעות קבועות</button>
+            <button type="button" id="hours-week" aria-pressed="false">שבוע שנבחר</button>
+          </div>
+          <p id="hours-scope" class="admin-note"></p>
+          <div class="cal__nav admin-day-nav" id="week-nav" hidden>
+            <button type="button" id="week-prev">שבוע קודם</button>
+            <h2 id="week-label"></h2>
+            <button type="button" id="week-next">שבוע הבא</button>
+          </div>
+          <div id="week-days" class="admin-hours"></div>
+          <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השעות הקבועות</button>
+          <button type="button" class="btn btn--ghost" id="week-clear" hidden>ביטול השינוי החריג</button>
+          <p id="week-status" class="admin-feedback" role="status"></p>
+          <div id="week-conflicts" class="admin-conflicts"></div>
+        </div>
+      </article>
     </section>
 
     <section class="admin-panel" data-admin-section="day" hidden aria-labelledby="day-title">
       <h1 id="day-title">הלוז היומי שלי</h1>
-      <p class="admin-note">עם חשבון אדמין מוצגים התורים מהשרת. כניסה זמנית לפיתוח מציגה את מה שנשמר במכשיר זה.</p>
       <div class="cal__nav admin-day-nav">
         <button type="button" id="day-prev">יום קודם</button>
         <h2 id="day-label"></h2>
@@ -92,10 +132,29 @@
 
     <section class="admin-panel" data-admin-section="orders" hidden aria-labelledby="orders-title">
       <h1 id="orders-title">כל ההזמנות</h1>
-      <p class="admin-note">חשבון אדמין רואה את כל ההזמנות בשרת. כניסה זמנית לפיתוח רואה רק את המכשיר הזה. ביטול תור מאושר דורש אישור.</p>
       <div id="admin-notice-list"></div>
-      <div class="admin-tools">
-        <label>סטטוס
+      <div class="admin-tools" role="toolbar" aria-label="סינון הזמנות">
+        <button type="button" class="admin-tool" id="tool-status" aria-expanded="false" aria-controls="tool-status-panel" aria-label="סטטוס">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+            <path d="M8.2 12.2l2.4 2.4 5.2-5.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <button type="button" class="admin-tool" id="tool-date" aria-expanded="false" aria-controls="tool-date-panel" aria-label="תאריך">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <rect x="3.5" y="5" width="17" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"></rect>
+            <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          </svg>
+        </button>
+        <button type="button" class="admin-tool" id="tool-search" aria-expanded="false" aria-controls="tool-search-panel" aria-label="חיפוש">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+            <path d="M15.2 15.2L20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="admin-tool-panels">
+        <label class="admin-tool-panel" id="tool-status-panel" hidden>סטטוס
           <select id="orders-status">
             <option value="all">הכול</option>
             <option value="pending">ממתין</option>
@@ -104,10 +163,10 @@
             <option value="cancelled">בוטל</option>
           </select>
         </label>
-        <label>תאריך
+        <label class="admin-tool-panel" id="tool-date-panel" hidden>תאריך
           <input type="date" id="orders-date">
         </label>
-        <label>חיפוש
+        <label class="admin-tool-panel" id="tool-search-panel" hidden>חיפוש
           <input type="search" id="orders-search" placeholder="שם או טלפון" autocomplete="off">
         </label>
       </div>
@@ -117,54 +176,12 @@
 
     <section class="admin-panel" data-admin-section="pending" hidden aria-labelledby="pending-title">
       <h1 id="pending-title">ממתינות לאישור</h1>
-      <p class="admin-note">רק בקשות שממתינות. בחשבון אדמין האישור והדחייה נשמרים בשרת. אין עדיין התראה ללקוח.</p>
       <p id="pending-feedback" class="admin-feedback" role="status"></p>
       <div id="pending-list"></div>
     </section>
 
-    <section class="admin-panel" data-admin-section="settings" hidden aria-labelledby="settings-title">
-      <h1 id="settings-title">הגדרות העסק</h1>
-      <p class="admin-note">מחיר ומשך של כל שירות נשמרים בשרת. שם התצוגה ומשך ברירת המחדל נשארים במכשיר הזה. זמן הנסיעה בין תורים נשאר בהגדרת השרת.</p>
-      <form id="business-form">
-        <label class="admin-field">שם לתצוגה בניהול
-          <input id="biz-name" name="name" type="text" maxlength="80" autocomplete="organization" required>
-        </label>
-        <label class="admin-field">משך ברירת מחדל, בדקות
-          <input id="biz-slot" name="slot" type="number" min="15" max="180" step="5" inputmode="numeric" required>
-        </label>
-        <fieldset>
-          <legend>תספורת גברים</legend>
-          <label class="admin-field">מחיר בשקלים
-            <input data-service="mens-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
-          </label>
-          <label class="admin-field">משך בדקות
-            <input data-service="mens-haircut" data-field="minutes" type="number" min="10" max="180" step="5" inputmode="numeric" required>
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>תספורת ילדים</legend>
-          <label class="admin-field">מחיר בשקלים
-            <input data-service="kids-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
-          </label>
-          <label class="admin-field">משך בדקות
-            <input data-service="kids-haircut" data-field="minutes" type="number" min="10" max="180" step="5" inputmode="numeric" required>
-          </label>
-        </fieldset>
-        <fieldset>
-          <legend>סידור זקן</legend>
-          <label class="admin-field">מחיר בשקלים
-            <input data-service="beard" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
-          </label>
-          <label class="admin-field">משך בדקות
-            <input data-service="beard" data-field="minutes" type="number" min="10" max="180" step="5" inputmode="numeric" required>
-          </label>
-        </fieldset>
-        <button type="submit" class="btn btn--gold admin-save">שמירת ההגדרות</button>
-        <p id="biz-status" class="admin-feedback" role="status"></p>
-      </form>
-    </section>
     <noscript>
-      <p class="admin-note">כדי להשתמש בניהול צריך לאפשר JavaScript. אין כאן חיבור לשרת.</p>
+      <p class="admin-note">כדי להשתמש בניהול צריך לאפשר JavaScript.</p>
     </noscript>
     </div>
   </main>

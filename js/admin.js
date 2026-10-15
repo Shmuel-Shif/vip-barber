@@ -21,19 +21,40 @@
     loginError.textContent = message;
   }
 
+  function blankLoginField(input) {
+    if (!input) {
+      return;
+    }
+    input.setAttribute("readonly", "readonly");
+    input.value = "";
+    input.addEventListener("focus", function () {
+      input.removeAttribute("readonly");
+    });
+    window.setTimeout(function () {
+      if (document.activeElement !== input) {
+        input.value = "";
+      }
+    }, 80);
+    window.setTimeout(function () {
+      if (document.activeElement !== input) {
+        input.value = "";
+      }
+    }, 600);
+  }
+
+  blankLoginField(usernameInput);
+  blankLoginField(passwordInput);
+
   if (passwordToggle && passwordInput) {
     passwordToggle.addEventListener("click", function () {
       var revealed = passwordInput.getAttribute("type") === "text";
       passwordInput.setAttribute("type", revealed ? "password" : "text");
-      passwordToggle.textContent = revealed ? "הצגה" : "הסתרה";
       passwordToggle.setAttribute("aria-pressed", revealed ? "false" : "true");
       passwordToggle.setAttribute("aria-label", revealed ? "הצגת הסיסמה" : "הסתרת הסיסמה");
     });
   }
 
-  var devOpen = document.getElementById("admin-dev-open");
   var devExit = document.getElementById("admin-dev-exit");
-  var devKey = "vip-admin-dev-open";
 
   function showAdmin() {
     var app = document.getElementById("admin-app");
@@ -47,19 +68,6 @@
     }
     if (devExit) {
       devExit.hidden = false;
-    }
-  }
-
-  function openAdminForDevelopment() {
-    serverMode = false;
-    if (window.VIP_ORDERS && window.VIP_ORDERS.watchServer) {
-      window.VIP_ORDERS.watchServer(false);
-    }
-    showAdmin();
-    try {
-      sessionStorage.setItem(devKey, "1");
-    } catch (error) {
-      return;
     }
   }
 
@@ -81,42 +89,17 @@
     if (devExit) {
       devExit.hidden = true;
     }
-    try {
-      sessionStorage.removeItem(devKey);
-    } catch (error) {
-      serverMode = false;
-    }
     if (signingOut && window.VIP_SUPABASE && window.VIP_SUPABASE.signOut) {
       window.VIP_SUPABASE.signOut();
     }
   }
 
-  if (devOpen) {
-    devOpen.addEventListener("click", openAdminForDevelopment);
-  }
   if (devExit) {
     devExit.addEventListener("click", closeAdminDevelopment);
-  }
-  function restoreDevelopmentDoor() {
-    try {
-      if (sessionStorage.getItem(devKey) === "1") {
-        openAdminForDevelopment();
-        if (typeof refreshLists === "function") {
-          refreshLists();
-        }
-      }
-    } catch (error) {
-      return;
-    }
   }
 
   function openServerAdmin() {
     serverMode = true;
-    try {
-      sessionStorage.removeItem(devKey);
-    } catch (error) {
-      serverMode = true;
-    }
     showAdmin();
     loadServerSchedule();
     loadServerPrices();
@@ -159,7 +142,6 @@
           passwordInput.setAttribute("type", "password");
         }
         if (passwordToggle) {
-          passwordToggle.textContent = "הצגה";
           passwordToggle.setAttribute("aria-pressed", "false");
           passwordToggle.setAttribute("aria-label", "הצגת הסיסמה");
         }
@@ -529,7 +511,7 @@
     }
     if (scope) {
       if (hoursMode === "standing") {
-        scope.textContent = "אלה שעות קבועות. הן חוזרות בכל שבוע שאין לו שינוי חריג.";
+        scope.textContent = "אלה שעות קבועות. שבת סגורה. הן חוזרות בכל שבוע שאין לו שינוי חריג.";
       } else if (weekIsOverride) {
         scope.textContent = "שינוי חריג לשבוע שנבחר. שאר השבועות נשארים לפי השעות הקבועות.";
       } else {
@@ -538,6 +520,9 @@
     }
     root.textContent = "";
     schedule.weekdays.forEach(function (day) {
+      if (hoursMode === "standing" && day.id === "6") {
+        return;
+      }
       var date = weekDate(day.id);
       var item = week[day.id];
       var open = item.status === "hours";
@@ -628,6 +613,17 @@
     return iso(date);
   }
 
+  function closeSaturday(days) {
+    days["6"] = {
+      status: "closed",
+      start: "",
+      end: "",
+      blocked: [],
+      breaks: []
+    };
+    return days;
+  }
+
   function rowsFor(weekStart, days, keepBlocked) {
     return schedule.weekdays.map(function (day) {
       var item = days[day.id];
@@ -666,6 +662,10 @@
         return false;
       }
       schedule.applyRemote(result.schedule, []);
+      var travelInput = document.getElementById("biz-travel");
+      if (travelInput && typeof schedule.travelMinutes === "number" && travelInput.getAttribute("data-touched") !== "true") {
+        travelInput.value = String(schedule.travelMinutes);
+      }
       loadWeek();
       if (successText) {
         statusNode.textContent = successText;
@@ -766,6 +766,9 @@
     var statusNode = document.getElementById("week-status");
     var invalid = false;
     var stored;
+    if (hoursMode === "standing") {
+      closeSaturday(week);
+    }
     schedule.weekdays.forEach(function (day) {
       if (!dayHoursValid(week[day.id])) {
         invalid = true;
@@ -787,6 +790,7 @@
         schedule.weekdays.forEach(function (day) {
           days[day.id].blocked = [];
         });
+        closeSaturday(days);
       }
       if (!auth || !auth.saveWeeklyHours || !auth.saveWeekOverride) {
         statusNode.textContent = "לא ניתן לשמור את השעות בשרת.";
@@ -817,7 +821,7 @@
     }
     stored = readAvailability();
     if (hoursMode === "standing") {
-      stored.standing = cleanWeek();
+      stored.standing = closeSaturday(cleanWeek());
       schedule.weekdays.forEach(function (day) {
         stored.standing[day.id].blocked = [];
       });
@@ -837,9 +841,9 @@
       weekIsOverride = true;
     }
     if (hoursMode === "standing") {
-      statusNode.textContent = "השעות הקבועות נשמרו במכשיר זה. לוח הלקוח במכשיר זה ישתמש בהן. אין סנכרון בין מכשירים, והתורים הקיימים לא בוטלו.";
+      statusNode.textContent = "השעות הקבועות נשמרו. התורים הקיימים לא בוטלו.";
     } else {
-      statusNode.textContent = "השינוי נשמר רק לשבוע שנבחר, במכשיר זה. השעות הקבועות לא השתנו, ואין סנכרון בין מכשירים. התורים הקיימים לא בוטלו.";
+      statusNode.textContent = "השינוי נשמר לשבוע שנבחר. השעות הקבועות לא השתנו, והתורים הקיימים לא בוטלו.";
     }
     renderWeek();
     paintConflicts();
@@ -893,48 +897,68 @@
     paintConflicts();
   }
 
-  function detailLines(order) {
+  function addDetail(parent, label, value) {
+    if (!value) {
+      return;
+    }
+    var row = document.createElement("div");
+    var name = document.createElement("span");
+    var text = document.createElement("span");
+    row.className = "admin-detail";
+    name.className = "admin-detail__label";
+    name.textContent = label;
+    text.className = "admin-detail__value";
+    text.textContent = value;
+    row.appendChild(name);
+    row.appendChild(text);
+    parent.appendChild(row);
+  }
+
+  function fillDetails(parent, order) {
     var customer = order.customer || {};
-    var lines = [serviceText(order)];
-    var address = addressOf(customer);
-    if (address) {
-      lines.push("כתובת: " + address);
-    }
-    if (customer.entrance) {
-      lines.push("כניסה: " + customer.entrance);
-    }
-    if (customer.floor) {
-      lines.push("קומה: " + customer.floor);
-    }
-    if (customer.apartment) {
-      lines.push("דירה: " + customer.apartment);
-    }
-    if (customer.entryCode) {
-      lines.push("קוד כניסה: " + customer.entryCode);
-    }
-    if (customer.notes) {
-      lines.push("הערות: " + customer.notes);
-    }
-    if (customer.payment && paymentNames[customer.payment]) {
-      lines.push("תשלום אחרי התספורת: " + paymentNames[customer.payment]);
-    }
+    addDetail(parent, "שירות", serviceText(order));
+    addDetail(parent, "כתובת", addressOf(customer));
+    addDetail(parent, "כניסה", customer.entrance);
+    addDetail(parent, "קומה", customer.floor);
+    addDetail(parent, "דירה", customer.apartment);
+    addDetail(parent, "קוד כניסה", customer.entryCode);
+    addDetail(parent, "הערות", customer.notes);
+    addDetail(parent, "תשלום", customer.payment && paymentNames[customer.payment]);
     if (order.cancelledBy === "customer") {
-      lines.push("בוטל על ידי הלקוח. ההתראה שמורה במכשיר זה ועדיין לא נשלחת.");
+      addDetail(parent, "ביטול", "בוטל על ידי הלקוח.");
     }
-    return lines;
   }
 
   function compactCard(order, actions) {
     var customer = order.customer || {};
     var card = document.createElement("article");
     var toggle = document.createElement("button");
+    var top = document.createElement("span");
+    var when = document.createElement("span");
+    var badge = document.createElement("span");
+    var name = document.createElement("span");
+    var phone = document.createElement("span");
     var body = document.createElement("div");
     var expanded = openOrder === order.id;
-    card.className = "admin-compact is-" + (statusNames[order.status] ? order.status : "pending");
+    var status = statusNames[order.status] ? order.status : "pending";
+    card.className = "admin-compact is-" + status;
     toggle.type = "button";
     toggle.className = "admin-compact__toggle";
     toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-    toggle.textContent = (order.time || "בלי שעה") + " · " + (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : "") + " · " + (statusNames[order.status] || "ממתין");
+    top.className = "admin-compact__top";
+    when.className = "admin-compact__when";
+    when.textContent = dateLabel(order.date) + (order.time ? " · " + order.time : "");
+    badge.className = "admin-compact__status is-" + status;
+    badge.textContent = statusNames[status] || "ממתין";
+    name.className = "admin-compact__name";
+    name.textContent = customer.fullName || "ללא שם";
+    phone.className = "admin-compact__phone";
+    phone.textContent = customer.phone || "בלי טלפון";
+    top.appendChild(when);
+    top.appendChild(badge);
+    toggle.appendChild(top);
+    toggle.appendChild(name);
+    toggle.appendChild(phone);
     toggle.addEventListener("click", function () {
       openOrder = expanded ? "" : order.id;
       paintOrders();
@@ -943,9 +967,7 @@
     });
     body.className = "admin-compact__body";
     body.hidden = !expanded;
-    detailLines(order).forEach(function (line) {
-      paragraph(body, line);
-    });
+    fillDetails(body, order);
     if (order.photo && expanded) {
       var image = document.createElement("img");
       image.src = order.photo;
@@ -1051,6 +1073,7 @@
     }
     var items = filteredOrders();
     list.textContent = "";
+    syncToolMarks();
     if (!items.length) {
       paragraph(list, "אין הזמנות במכשיר זה לפי הסינון שנבחר.", "orders-empty");
       return;
@@ -1165,7 +1188,10 @@
 
   function showPanel(name) {
     var aliases = { dashboard: "day", requests: "pending", calendar: "hours", approved: "orders" };
-    var panels = { hours: true, day: true, orders: true, pending: true, settings: true };
+    var panels = { day: true, orders: true, pending: true, settings: true };
+    if (name === "hours" || name === "calendar") {
+      name = "settings";
+    }
     if (aliases[name]) {
       name = aliases[name];
     }
@@ -1182,7 +1208,7 @@
         button.removeAttribute("aria-current");
       }
     });
-    if (name === "hours") {
+    if (name === "settings") {
       renderWeek();
     }
     if (name === "day" || name === "orders" || name === "pending") {
@@ -1241,11 +1267,10 @@
   function fillSettings() {
     var form = document.getElementById("business-form");
     var data = readSettings();
+    var travel = 10;
     if (!form) {
       return;
     }
-    document.getElementById("biz-name").value = data.name;
-    document.getElementById("biz-slot").value = String(data.slotMinutes);
     if (serverCatalog) {
       serverCatalog.forEach(function (row) {
         if (!data.services[row.id]) {
@@ -1259,17 +1284,17 @@
         }
       });
     }
+    if (window.VIP_SCHEDULE && typeof window.VIP_SCHEDULE.travelMinutes === "number") {
+      travel = window.VIP_SCHEDULE.travelMinutes;
+    }
+    document.getElementById("biz-cut").value = String(data.services["mens-haircut"] && data.services["mens-haircut"].minutes >= 10 ? data.services["mens-haircut"].minutes : 30);
+    document.getElementById("biz-travel").value = String(travel);
     each(form.querySelectorAll("[data-service]"), function (input) {
       var service = data.services[input.getAttribute("data-service")];
-      if (!service) {
+      if (!service || input.getAttribute("data-field") !== "price") {
         return;
       }
-      if (input.getAttribute("data-field") === "price") {
-        input.value = service.priceIls === null || service.priceIls === undefined ? "" : String(service.priceIls);
-      }
-      if (input.getAttribute("data-field") === "minutes") {
-        input.value = String(service.minutes);
-      }
+      input.value = service.priceIls === null || service.priceIls === undefined ? "" : String(service.priceIls);
     });
   }
 
@@ -1315,6 +1340,47 @@
     openOrder = "";
     paintDay();
   });
+  function syncToolMarks() {
+    var status = document.getElementById("orders-status");
+    var date = document.getElementById("orders-date");
+    var search = document.getElementById("orders-search");
+    var statusButton = document.getElementById("tool-status");
+    var dateButton = document.getElementById("tool-date");
+    var searchButton = document.getElementById("tool-search");
+    if (statusButton) {
+      statusButton.classList.toggle("is-set", !!(status && status.value !== "all"));
+    }
+    if (dateButton) {
+      dateButton.classList.toggle("is-set", !!(date && date.value));
+    }
+    if (searchButton) {
+      searchButton.classList.toggle("is-set", !!(search && search.value.trim()));
+    }
+  }
+
+  function openTool(id) {
+    ["status", "date", "search"].forEach(function (name) {
+      var button = document.getElementById("tool-" + name);
+      var panel = document.getElementById("tool-" + name + "-panel");
+      var open = name === id && button && button.getAttribute("aria-expanded") !== "true";
+      if (button) {
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+      if (panel) {
+        panel.hidden = !open;
+      }
+    });
+  }
+
+  ["status", "date", "search"].forEach(function (name) {
+    var button = document.getElementById("tool-" + name);
+    if (!button) {
+      return;
+    }
+    button.addEventListener("click", function () {
+      openTool(name);
+    });
+  });
   ["orders-status", "orders-date", "orders-search"].forEach(function (id) {
     var field = document.getElementById(id);
     if (!field) {
@@ -1335,46 +1401,73 @@
     cancelId = "";
     document.getElementById("admin-confirm").close();
   });
+  document.getElementById("biz-travel").addEventListener("input", function () {
+    this.setAttribute("data-touched", "true");
+  });
+  document.getElementById("settings-toggle").addEventListener("click", function () {
+    var body = document.getElementById("settings-body");
+    var open = body.hidden;
+    body.hidden = !open;
+    this.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.getElementById("hours-toggle").addEventListener("click", function () {
+    var body = document.getElementById("hours-body");
+    var open = body.hidden;
+    body.hidden = !open;
+    this.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      renderWeek();
+    }
+  });
   document.getElementById("business-form").addEventListener("submit", function (event) {
     var message = document.getElementById("biz-status");
     var current = readSettings();
-    var name = document.getElementById("biz-name").value.trim();
-    var slotMinutes = Number(document.getElementById("biz-slot").value);
+    var cut = Number(document.getElementById("biz-cut").value);
+    var travel = Number(document.getElementById("biz-travel").value);
+    var beardMinutes = 10;
     var invalid = false;
     event.preventDefault();
-    if (!name) {
-      message.textContent = "צריך שם עסק.";
+    if (!(cut >= 10 && cut <= 180) || cut !== Math.round(cut)) {
+      message.textContent = "זמן התספורת צריך להיות בין 10 ל־180 דקות.";
       return;
     }
-    if (!(slotMinutes >= 15 && slotMinutes <= 180)) {
-      message.textContent = "משך ברירת המחדל צריך להיות בין 15 ל־180 דקות.";
+    if (!(travel >= 0 && travel <= 180) || travel !== Math.round(travel)) {
+      message.textContent = "זמן הנסיעה צריך להיות בין 0 ל־180 דקות.";
       return;
+    }
+    if (serverCatalog) {
+      serverCatalog.forEach(function (row) {
+        if (row.id === "beard" && row.minutes >= 10 && row.minutes <= 180) {
+          beardMinutes = Number(row.minutes);
+        }
+        if (current.services[row.id] && row.minutes >= 10 && row.minutes <= 180 && row.id === "beard") {
+          current.services[row.id].minutes = Number(row.minutes);
+        }
+      });
+    }
+    if (current.services["mens-haircut"]) {
+      current.services["mens-haircut"].minutes = cut;
+    }
+    if (current.services["kids-haircut"]) {
+      current.services["kids-haircut"].minutes = cut;
+    }
+    if (current.services.beard) {
+      current.services.beard.minutes = beardMinutes;
     }
     each(event.target.querySelectorAll("[data-service]"), function (input) {
       var id = input.getAttribute("data-service");
-      var field = input.getAttribute("data-field");
       var value = Number(input.value);
-      if (!current.services[id]) {
+      if (!current.services[id] || input.getAttribute("data-field") !== "price") {
         return;
       }
-      if (field === "minutes" && !(value >= 10 && value <= 180)) {
+      if (input.value === "" || value < 0 || value > 9999 || value !== Math.round(value)) {
         invalid = true;
+        return;
       }
-      if (field === "price" && (input.value === "" || value < 0 || value > 9999 || value !== Math.round(value))) {
-        invalid = true;
-      }
-      if (field === "minutes" && value !== Math.round(value)) {
-        invalid = true;
-      }
-      if (!invalid && field === "minutes") {
-        current.services[id].minutes = value;
-      }
-      if (!invalid && field === "price") {
-        current.services[id].priceIls = value;
-      }
+      current.services[id].priceIls = value;
     });
     if (invalid) {
-      message.textContent = "בדקו מחיר ומספר דקות. מחיר הוא מספר בין 0 ל־9999, ומשך הוא בין 10 ל־180.";
+      message.textContent = "כל מחיר צריך להיות מספר שלם בין 0 ל־9999.";
       return;
     }
     if (serverMode && !serverCatalog) {
@@ -1384,10 +1477,11 @@
     if (serverMode) {
       var auth = window.VIP_SUPABASE;
       var jobs = [];
-      if (!auth || !auth.saveService) {
+      if (!auth || !auth.saveService || !auth.saveTravel) {
         message.textContent = "לא ניתן לשמור את המחירים בשרת.";
         return;
       }
+      jobs.push(auth.saveTravel(travel));
       Object.keys(current.services).forEach(function (id) {
         var item = current.services[id];
         if (item.priceIls === null || item.priceIls === undefined) {
@@ -1414,6 +1508,9 @@
             active: true
           };
         });
+        if (window.VIP_SCHEDULE) {
+          window.VIP_SCHEDULE.travelMinutes = travel;
+        }
         if (window.VIP_DEMO && window.VIP_DEMO.applyServer) {
           window.VIP_DEMO.applyServer(serverCatalog);
         }
@@ -1421,15 +1518,16 @@
           localStorage.setItem(settingsKey, JSON.stringify({
             temporary: true,
             syncedWithCustomers: false,
-            name: name,
-            slotMinutes: slotMinutes,
+            name: current.name,
+            slotMinutes: current.slotMinutes,
             services: current.services
           }));
         } catch (error) {
-          message.textContent = "המחירים נשמרו בשרת. השם ומשך ברירת המחדל לא נשמרו במכשיר.";
+          message.textContent = "הזמנים והמחירים נשמרו בשרת. העותק במכשיר לא נשמר.";
           return;
         }
-        message.textContent = "המחירים ומשך השירותים נשמרו בשרת. הלקוחות יראו אותם אחרי טעינה מחדש. השם ומשך ברירת המחדל נשארים במכשיר הזה.";
+        document.getElementById("biz-travel").removeAttribute("data-touched");
+        message.textContent = "זמן התספורת, זמן הנסיעה והמחירים נשמרו.";
       }).catch(function () {
         message.textContent = "לא ניתן לשמור את המחירים בשרת.";
       });
@@ -1439,15 +1537,15 @@
       localStorage.setItem(settingsKey, JSON.stringify({
         temporary: true,
         syncedWithCustomers: false,
-        name: name,
-        slotMinutes: slotMinutes,
+        name: current.name,
+        slotMinutes: current.slotMinutes,
         services: current.services
       }));
     } catch (error) {
       message.textContent = "לא ניתן לשמור במכשיר זה.";
       return;
     }
-    message.textContent = "נשמר במכשיר זה בלבד. מחירי הלקוחות מגיעים מהשרת, ורק חשבון אדמין יכול לעדכן אותם.";
+    message.textContent = "ההגדרות נשמרו במכשיר זה בלבד.";
   });
   each(document.querySelectorAll("[data-admin-panel]"), function (button) {
     button.addEventListener("click", function () {
@@ -1463,11 +1561,7 @@
     window.VIP_SUPABASE.profile().then(function (result) {
       if (result && result.profile && result.profile.role === "admin" && result.session) {
         openServerAdmin();
-        return;
       }
-      restoreDevelopmentDoor();
     });
-  } else {
-    restoreDevelopmentDoor();
   }
 })();

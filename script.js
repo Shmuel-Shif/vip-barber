@@ -1483,7 +1483,16 @@
         return { id: "", error: result.error };
       }
       if (!result || !result.session) {
-        return { id: "", error: "כדי לשלוח את הבקשה צריך להתחבר או להירשם. הפרטים נשארים בעמוד." };
+        button.disabled = false;
+        saySend("");
+        if (window.VIP_AUTH && window.VIP_AUTH.open) {
+          window.VIP_AUTH.open(function () {
+            button.click();
+          }, result && result.error ? result.error : "כדי לשלוח את הבקשה צריך להתחבר או להירשם.");
+        } else {
+          saySend("כדי לשלוח את הבקשה צריך להתחבר או להירשם. הפרטים נשארים בעמוד.");
+        }
+        return { id: "", skipped: true };
       }
       return auth.requestAppointment({
         adults: draft.adults,
@@ -1504,6 +1513,9 @@
         payment: customer.payment
       });
     }).then(function (result) {
+      if (result && result.skipped) {
+        return;
+      }
       button.disabled = false;
       if (!result || result.error || !result.id) {
         saySend(result && result.error ? result.error : "הבקשה לא נשמרה.");
@@ -1640,6 +1652,8 @@
   }
 
   var accountFailed = false;
+  var signedIn = false;
+  var accessReady = false;
   var ordersFeedback = document.getElementById("orders-feedback");
 
   function sayOrders(text) {
@@ -1649,6 +1663,9 @@
   }
 
   function shownOrders() {
+    if (!signedIn) {
+      return [];
+    }
     var remote = accountFailed || !orders.accountOrders ? [] : orders.accountOrders();
     var seen = {};
     remote.forEach(function (order) {
@@ -1665,42 +1682,118 @@
     return remote.concat(onDevice);
   }
 
+  function detailRow(parent, label, value) {
+    var row = document.createElement("div");
+    var name = document.createElement("span");
+    var text = document.createElement("span");
+    row.className = "order-card__row";
+    name.className = "order-card__label";
+    name.textContent = label;
+    text.className = "order-card__value";
+    text.textContent = value;
+    row.appendChild(name);
+    row.appendChild(text);
+    parent.appendChild(row);
+  }
+
+  var hiddenKey = "vip-hidden-order-cards";
+
+  function hiddenMap() {
+    try {
+      var raw = localStorage.getItem(hiddenKey);
+      var list = raw ? JSON.parse(raw) : [];
+      var map = {};
+      if (!Array.isArray(list)) {
+        return map;
+      }
+      list.forEach(function (id) {
+        if (id) {
+          map[String(id)] = true;
+        }
+      });
+      return map;
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function hideCard(order) {
+    var map = hiddenMap();
+    var list = [];
+    if (order.id) {
+      map[String(order.id)] = true;
+    }
+    if (order.serverId) {
+      map[String(order.serverId)] = true;
+    }
+    Object.keys(map).forEach(function (id) {
+      list.push(id);
+    });
+    try {
+      localStorage.setItem(hiddenKey, JSON.stringify(list));
+    } catch (error) {
+      return;
+    }
+  }
+
   function paint(target, canApprove) {
-    var items = shownOrders();
+    var hidden = canApprove ? {} : hiddenMap();
+    var items = shownOrders().filter(function (order) {
+      if (!order || canApprove) {
+        return !!order;
+      }
+      return !hidden[String(order.id || "")] && !hidden[String(order.serverId || "")];
+    });
+    var title = document.getElementById("orders-title");
+    var intro = document.getElementById("orders-intro");
     target.textContent = "";
+    if (title) {
+      title.hidden = items.length > 0;
+    }
+    if (intro) {
+      intro.hidden = !signedIn || items.length > 0;
+    }
     if (!items.length) {
-      if (accountFailed) {
+      if (accountFailed || !accessReady) {
         return;
       }
       var empty = document.createElement("p");
       empty.className = "orders-empty";
-      empty.textContent = "אין עדיין הזמנות.";
+      empty.textContent = signedIn ? "אין עדיין הזמנות." : "כדי לראות את ההזמנות צריך להתחבר.";
       target.appendChild(empty);
       return;
     }
     items.forEach(function (order) {
       var customer = order.customer || {};
       var card = document.createElement("article");
-      var status = document.createElement("p");
-      var when = document.createElement("p");
-      var who = document.createElement("p");
-      var where = document.createElement("p");
-      var service = document.createElement("p");
+      var top = document.createElement("div");
+      var status = document.createElement("span");
+      var state = order.status === "approved" || order.status === "rejected" || order.status === "cancelled" ? order.status : "pending";
       card.className = "order-card";
-      status.className = "order-card__status is-" + (order.status === "approved" || order.status === "rejected" || order.status === "cancelled" ? order.status : "pending");
-      status.textContent = order.status === "approved" ? "מאושר" : order.status === "rejected" ? "נדחה" : order.status === "cancelled" ? "בוטל" : "ממתין";
-      when.textContent = dateLabel(order.date) + (order.time ? ", בשעה " + order.time : "");
-      who.textContent = (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : "");
-      where.textContent = addressOf(customer);
-      service.textContent = counts(order);
-      card.appendChild(status);
-      var source = document.createElement("p");
-      source.textContent = order.server ? "בחשבון" : "נשמר במכשיר זה";
-      card.appendChild(source);
-      card.appendChild(when);
-      card.appendChild(service);
-      card.appendChild(who);
-      card.appendChild(where);
+      top.className = "order-card__top";
+      status.className = "order-card__status is-" + state;
+      status.textContent = state === "approved" ? "מאושר" : state === "rejected" ? "נדחה" : state === "cancelled" ? "בוטל" : "ממתין";
+      top.appendChild(status);
+      if (!canApprove) {
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "order-card__remove";
+        remove.setAttribute("aria-label", "הסרת הכרטיס");
+        remove.textContent = "×";
+        remove.addEventListener("click", function () {
+          hideCard(order);
+          paint(target, canApprove);
+        });
+        top.appendChild(remove);
+      }
+      card.appendChild(top);
+      detailRow(card, "מועד", dateLabel(order.date) + (order.time ? " · " + order.time : ""));
+      detailRow(card, "אנשים", counts(order));
+      detailRow(card, "שם", customer.fullName || "ללא שם");
+      if (customer.phone) {
+        detailRow(card, "טלפון", customer.phone);
+      }
+      detailRow(card, "כתובת", addressOf(customer));
       if (order.photo) {
         var image = document.createElement("img");
         image.src = order.photo;
@@ -1741,7 +1834,6 @@
   }
 
   if (list) {
-    paint(list, false);
     function loadOwnOrders() {
       var auth = window.VIP_SUPABASE;
       if (!auth || !auth.profile || !orders.reloadAccount) {
@@ -1756,6 +1848,8 @@
       sayOrders("טוענים את ההזמנות מהחשבון...");
       return auth.profile().then(function (result) {
         if (!result || !result.session || !result.session.user) {
+          signedIn = false;
+          accessReady = true;
           accountFailed = !!(result && result.error);
           if (orders.forgetAccount) {
             orders.forgetAccount();
@@ -1764,6 +1858,8 @@
           paint(list, false);
           return null;
         }
+        signedIn = true;
+        accessReady = true;
         return orders.reloadAccount().then(function (loaded) {
           if (!loaded || loaded.error) {
             accountFailed = true;
@@ -1791,7 +1887,22 @@
         paint(list, false);
       });
     }
-    loadOwnOrders();
+    orders.showAccount = function (session) {
+      if (session && session.user) {
+        signedIn = true;
+        accessReady = true;
+        return loadOwnOrders();
+      }
+      signedIn = false;
+      accessReady = true;
+      accountFailed = false;
+      if (orders.forgetAccount) {
+        orders.forgetAccount();
+      }
+      sayOrders("");
+      paint(list, false);
+      return Promise.resolve();
+    };
     orders.paintCustomerList = function () {
       accountFailed = false;
       sayOrders("");
@@ -1871,22 +1982,151 @@
 (function () {
   "use strict";
 
-  var form = document.getElementById("account-form");
   var auth = window.VIP_SUPABASE;
-  if (!form || !auth) {
+  var header = document.querySelector(".site-header");
+  if (!auth || !header || document.body.classList.contains("admin")) {
     return;
   }
 
-  var usernameInput = document.getElementById("account-username");
-  var passwordInput = document.getElementById("account-password");
-  var status = document.getElementById("account-status");
-  var loginButton = document.getElementById("account-login");
-  var signupButton = document.getElementById("account-signup");
-  var logoutButton = document.getElementById("account-logout");
+  var brand = header.querySelector(".brand");
+  var menu = header.querySelector(".nav-toggle");
+  var userLabel = document.createElement("span");
+  var authButton = document.createElement("button");
+  var dialog = document.createElement("dialog");
+  var pending = null;
+  var activeSession = null;
+
+  userLabel.className = "header-user";
+  userLabel.hidden = true;
+  authButton.type = "button";
+  authButton.className = "header-auth";
+  authButton.textContent = "התחברות";
+  if (brand) {
+    brand.insertAdjacentElement("afterend", userLabel);
+  } else {
+    header.insertBefore(userLabel, header.firstChild);
+  }
+  if (menu) {
+    menu.insertAdjacentElement("beforebegin", authButton);
+  } else {
+    header.appendChild(authButton);
+  }
+
+  dialog.className = "sent-modal auth-modal";
+  dialog.setAttribute("aria-labelledby", "auth-title");
+  dialog.innerHTML = ""
+    + "<h2 id=\"auth-title\">התחברות</h2>"
+    + "<form id=\"auth-form\" method=\"post\" action=\"#\" autocomplete=\"off\" novalidate>"
+    + "<div class=\"field\"><label for=\"auth-username\">שם משתמש</label>"
+    + "<input id=\"auth-username\" name=\"vip-user\" type=\"text\" autocomplete=\"off\" maxlength=\"24\" autocapitalize=\"none\" spellcheck=\"false\">"
+    + "<p class=\"auth-hint\" id=\"auth-hint\" hidden>בהרשמה השם באנגלית בלבד: אותיות, ספרות או _.</p></div>"
+    + "<div class=\"field\"><label for=\"auth-password\">סיסמה</label>"
+    + "<div class=\"auth-secret\"><input id=\"auth-password\" name=\"vip-pass\" type=\"password\" autocomplete=\"new-password\" maxlength=\"200\">"
+    + "<button type=\"button\" id=\"auth-eye\" aria-controls=\"auth-password\" aria-pressed=\"false\" aria-label=\"הצגת הסיסמה\">"
+    + "<svg class=\"eye-open\" viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" aria-hidden=\"true\"><path d=\"M2.2 12S5.8 6.2 12 6.2 21.8 12 21.8 12 18.2 17.8 12 17.8 2.2 12 2.2 12z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"></path><circle cx=\"12\" cy=\"12\" r=\"2.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\"></circle></svg>"
+    + "<svg class=\"eye-shut\" viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" aria-hidden=\"true\"><path d=\"M3 3.5l18 17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"></path><path d=\"M10.4 6.4A11 11 0 0 1 12 6.2c6.2 0 9.8 5.8 9.8 5.8a18 18 0 0 1-3.3 3.7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"></path><path d=\"M6.2 8.3A18 18 0 0 0 2.2 12S5.8 17.8 12 17.8a11 11 0 0 0 4.1-.8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"></path><path d=\"M9.8 10a2.5 2.5 0 0 0 3.5 3.6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\"></path></svg>"
+    + "</button></div></div>"
+    + "<p id=\"auth-status\" class=\"orders-note\" role=\"status\"></p>"
+    + "<button type=\"submit\" class=\"btn btn--gold\" id=\"auth-login\">התחברות</button>"
+    + "<button type=\"button\" class=\"btn btn--ghost\" id=\"auth-signup\">הרשמה</button>"
+    + "<button type=\"button\" class=\"btn btn--ghost\" id=\"auth-close\">המשך ללא התחברות</button>"
+    + "</form>";
+  document.body.appendChild(dialog);
+
+  var form = dialog.querySelector("#auth-form");
+  var usernameInput = dialog.querySelector("#auth-username");
+  var passwordInput = dialog.querySelector("#auth-password");
+  var status = dialog.querySelector("#auth-status");
+  var eye = dialog.querySelector("#auth-eye");
+  var hint = dialog.querySelector("#auth-hint");
+  var title = dialog.querySelector("#auth-title");
+  var loginButton = dialog.querySelector("#auth-login");
+  var signupButton = dialog.querySelector("#auth-signup");
+  var authMode = "login";
+
+  function setMode(next) {
+    authMode = next === "signup" ? "signup" : "login";
+    if (hint) {
+      hint.hidden = authMode !== "signup";
+    }
+    if (title) {
+      title.textContent = authMode === "signup" ? "הרשמה" : "התחברות";
+    }
+    if (loginButton) {
+      loginButton.textContent = authMode === "signup" ? "הרשמה" : "התחברות";
+    }
+    if (signupButton) {
+      signupButton.textContent = authMode === "signup" ? "התחברות" : "הרשמה";
+    }
+  }
 
   function say(text) {
     if (status) {
-      status.textContent = text;
+      status.textContent = text || "";
+    }
+  }
+
+  function usernameOf(session, profile) {
+    if (profile && profile.username) {
+      return String(profile.username);
+    }
+    var user = session && session.user;
+    var meta = user && user.user_metadata ? user.user_metadata : {};
+    if (meta.username) {
+      return String(meta.username);
+    }
+    var email = user && user.email ? String(user.email) : "";
+    var mark = "@login.vip-barber.invalid";
+    var at = email.indexOf(mark);
+    return at > 0 ? email.slice(0, at) : "";
+  }
+
+  function paint(session, profile) {
+    var name = usernameOf(session, profile);
+    activeSession = session && session.user ? session : null;
+    userLabel.hidden = !name;
+    userLabel.textContent = name;
+    authButton.textContent = activeSession ? "התנתקות" : "התחברות";
+  }
+
+  function refreshOrders(session) {
+    if (!document.getElementById("orders-list") || !window.VIP_ORDERS || !window.VIP_ORDERS.showAccount) {
+      return;
+    }
+    window.VIP_ORDERS.showAccount(session);
+  }
+
+  function openModal(after, message) {
+    pending = typeof after === "function" ? after : null;
+    setMode("login");
+    say(message || "");
+    clearLoginFields();
+    window.setTimeout(clearLoginFields, 80);
+    if (passwordInput) {
+      passwordInput.setAttribute("type", "password");
+    }
+    if (eye) {
+      eye.setAttribute("aria-pressed", "false");
+      eye.setAttribute("aria-label", "הצגת הסיסמה");
+    }
+    if (dialog.showModal && !dialog.open) {
+      dialog.showModal();
+    }
+  }
+
+  function finish(session, profile) {
+    var done = pending;
+    pending = null;
+    paint(session, profile);
+    refreshOrders(session);
+    if (passwordInput) {
+      passwordInput.value = "";
+    }
+    if (dialog.open) {
+      dialog.close();
+    }
+    if (done) {
+      done();
     }
   }
 
@@ -1904,92 +2144,159 @@
     return { username: username, password: password };
   }
 
-  function showSession(session) {
-    var signedIn = !!(session && session.user);
-    if (loginButton) {
-      loginButton.hidden = signedIn;
-    }
-    if (signupButton) {
-      signupButton.hidden = signedIn;
-    }
-    if (logoutButton) {
-      logoutButton.hidden = !signedIn;
-    }
-    if (usernameInput && usernameInput.parentNode) {
-      usernameInput.parentNode.hidden = signedIn;
-    }
-    if (passwordInput && passwordInput.parentNode) {
-      passwordInput.parentNode.hidden = signedIn;
-    }
-    if (signedIn) {
-      var meta = session.user.user_metadata || {};
-      say("מחוברים בתור " + (meta.username || "") + ".");
-      if (passwordInput) {
-        passwordInput.value = "";
-      }
-    }
-    if (!window.VIP_ORDERS) {
-      return;
-    }
-    if (signedIn && window.VIP_ORDERS.refreshCustomerList) {
-      window.VIP_ORDERS.refreshCustomerList();
-      return;
-    }
-    if (window.VIP_ORDERS.forgetAccount) {
-      window.VIP_ORDERS.forgetAccount();
-    }
-    if (window.VIP_ORDERS.paintCustomerList) {
-      window.VIP_ORDERS.paintCustomerList();
-    }
-  }
-
   function run(action) {
     var fields = credentials();
-    if (!fields) {
+    var method = action === "signUp" ? "signUpWithUsername" : "signInWithUsername";
+    if (!fields || !auth[method]) {
+      if (fields && !auth[method]) {
+        say("החיבור לשרת לא נטען בעמוד.");
+      }
       return;
     }
     say("בודקים את החשבון...");
-    var method = action === "signUp" ? "signUpWithUsername" : "signInWithUsername";
     auth[method](fields.username, fields.password).then(function (result) {
-      if (!result || result.error) {
-        say(result && result.error ? result.error : "הפעולה נכשלה.");
+      if (!result || result.error || !result.session) {
+        say(result && result.error ? result.error : (result && result.needsConfirm ? "החשבון נפתח, אבל השרת עדיין דורש אישור לפני התחברות." : "הפעולה נכשלה."));
         return;
       }
-      if (result.needsConfirm) {
-        say("החשבון נפתח, אבל השרת עדיין דורש אישור לפני התחברות.");
-        if (passwordInput) {
-          passwordInput.value = "";
-        }
+      if (auth.profile) {
+        auth.profile().then(function (loaded) {
+          finish(result.session, loaded && loaded.profile);
+        });
         return;
       }
-      showSession(result.session);
+      finish(result.session);
+    }).catch(function () {
+      say("הפעולה נכשלה.");
     });
   }
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
-    run("signIn");
+    run(authMode === "signup" ? "signUp" : "signIn");
   });
-  if (signupButton) {
-    signupButton.addEventListener("click", function () {
-      run("signUp");
+  signupButton.addEventListener("click", function () {
+    setMode(authMode === "signup" ? "login" : "signup");
+    say("");
+  });
+  dialog.querySelector("#auth-close").addEventListener("click", function () {
+    pending = null;
+    dialog.close();
+  });
+  dialog.addEventListener("cancel", function () {
+    pending = null;
+  });
+  if (eye && passwordInput) {
+    eye.addEventListener("click", function () {
+      var revealed = passwordInput.getAttribute("type") === "text";
+      passwordInput.setAttribute("type", revealed ? "password" : "text");
+      eye.setAttribute("aria-pressed", revealed ? "false" : "true");
+      eye.setAttribute("aria-label", revealed ? "הצגת הסיסמה" : "הסתרת הסיסמה");
     });
   }
-  if (logoutButton) {
-    logoutButton.addEventListener("click", function () {
+  authButton.addEventListener("click", function () {
+    if (activeSession && auth.signOut) {
       auth.signOut().then(function () {
-        showSession(null);
-        say("יצאתם מהחשבון. ההזמנות שבמכשיר נשארו.");
+        paint(null);
+        refreshOrders(null);
       });
+      return;
+    }
+    openModal();
+  });
+
+  function blankLoginField(input) {
+    if (!input) {
+      return;
+    }
+    input.setAttribute("readonly", "readonly");
+    input.value = "";
+    input.addEventListener("focus", function () {
+      input.removeAttribute("readonly");
     });
   }
 
-  if (auth.session) {
-    auth.session().then(function (result) {
-      if (result && result.session) {
-        showSession(result.session);
+  function clearLoginFields() {
+    if (document.activeElement !== usernameInput && usernameInput) {
+      usernameInput.value = "";
+    }
+    if (document.activeElement !== passwordInput && passwordInput) {
+      passwordInput.value = "";
+    }
+  }
+
+  blankLoginField(usernameInput);
+  blankLoginField(passwordInput);
+  window.setTimeout(clearLoginFields, 80);
+  window.setTimeout(clearLoginFields, 600);
+
+  function remember(session, profile) {
+    paint(session, profile);
+    refreshOrders(session);
+    if (session && session.user && dialog.open && !pending) {
+      dialog.close();
+    }
+  }
+
+  window.VIP_AUTH = { open: openModal };
+
+  if (auth.watchAuth) {
+    auth.watchAuth(function (event, session) {
+      if (event === "SIGNED_OUT") {
+        paint(null);
+        refreshOrders(null);
+        return;
+      }
+      if (!session || !session.user) {
+        return;
+      }
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        remember(session);
+        if (event !== "TOKEN_REFRESHED" && auth.profile) {
+          auth.profile().then(function (loaded) {
+            if (activeSession && activeSession.user && loaded && loaded.profile) {
+              paint(activeSession, loaded.profile);
+            }
+          });
+        }
       }
     });
+  }
+
+  function boot() {
+    if (!auth.session) {
+      if (document.body.classList.contains("home")) {
+        openModal();
+      }
+      return;
+    }
+    auth.session().then(function (result) {
+      if (result && result.session) {
+        remember(result.session);
+        if (auth.profile) {
+          return auth.profile().then(function (loaded) {
+            remember(result.session, loaded && loaded.profile);
+          });
+        }
+        return null;
+      }
+      refreshOrders(null);
+      if (document.body.classList.contains("home") || document.getElementById("orders-list")) {
+        openModal(null, document.getElementById("orders-list") ? "כדי לראות את ההזמנות צריך להתחבר." : "");
+      }
+      return null;
+    }).catch(function () {
+      refreshOrders(null);
+      if (document.body.classList.contains("home") || document.getElementById("orders-list")) {
+        openModal(null, document.getElementById("orders-list") ? "כדי לראות את ההזמנות צריך להתחבר." : "");
+      }
+    });
+  }
+
+  if (auth.whenReady) {
+    auth.whenReady().then(boot);
+  } else {
+    boot();
   }
 })();
 
