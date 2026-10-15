@@ -116,23 +116,269 @@
     return Promise.resolve();
   }
 
-  function createClient() {
-    var authOptions;
-    if (!window.supabase || typeof window.supabase.createClient !== "function") {
-      throw new Error("Supabase library is not on the page.");
+  var customerTabId = "";
+  var heldLockId = "";
+  var handoffBound = false;
+  var clientPromise = null;
+
+  function isAdminPage() {
+    return !!(document.body && document.body.classList.contains("admin"));
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function newTabId() {
+    var bytes = new Uint8Array(16);
+    var index;
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (index = 0; index < bytes.length; index += 1) {
+        bytes[index] = Math.floor(Math.random() * 256);
+      }
     }
-    authOptions = {
+    return Array.prototype.map.call(bytes, function (value) {
+      var hex = value.toString(16);
+      return hex.length < 2 ? "0" + hex : hex;
+    }).join("");
+  }
+
+  function customerStorageKey(tabId) {
+    return "sb-riyiypsuwlnpsycobnpw-tab-" + tabId;
+  }
+
+  function readSessionItem(key) {
+    try {
+      return window.sessionStorage.getItem(key) || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function writeSessionItem(key, value) {
+    try {
+      window.sessionStorage.setItem(key, value);
+    } catch (error) {}
+  }
+
+  function removeSessionItem(key) {
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch (error) {}
+  }
+
+  function bindTabHandoff() {
+    if (handoffBound) {
+      return;
+    }
+    handoffBound = true;
+    function markHandoff() {
+      if (customerTabId) {
+        writeSessionItem("vip-customer-tab-handoff", customerTabId);
+      }
+    }
+    window.addEventListener("beforeunload", markHandoff);
+    window.addEventListener("pagehide", markHandoff);
+    window.addEventListener("pageshow", function (event) {
+      if (event.persisted) {
+        removeSessionItem("vip-customer-tab-handoff");
+      }
+    });
+  }
+
+  function rememberCustomerTab(tabId) {
+    customerTabId = tabId;
+    writeSessionItem("vip-customer-tab", tabId);
+    bindTabHandoff();
+    return tabId;
+  }
+
+  function claimTabLock(tabId) {
+    var name = "vip-customer-auth-" + tabId;
+    if (heldLockId === tabId) {
+      return Promise.resolve(true);
+    }
+    if (!navigator.locks || typeof navigator.locks.request !== "function") {
+      return Promise.resolve(false);
+    }
+    return new Promise(function (resolve) {
+      var settled = false;
+      function finish(owned) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(owned);
+      }
+      navigator.locks.request(name, { mode: "exclusive", ifAvailable: true }, function (lock) {
+        if (!lock) {
+          finish(false);
+          return undefined;
+        }
+        finish(true);
+        heldLockId = tabId;
+        return new Promise(function () {});
+      }).catch(function () {
+        finish(false);
+      });
+    });
+  }
+
+  function stealTabLock(tabId) {
+    var name = "vip-customer-auth-" + tabId;
+    if (heldLockId === tabId) {
+      return Promise.resolve(true);
+    }
+    if (!navigator.locks || typeof navigator.locks.request !== "function") {
+      return Promise.resolve(false);
+    }
+    return new Promise(function (resolve) {
+      var settled = false;
+      function finish(owned) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(owned);
+      }
+      navigator.locks.request(name, { steal: true }, function () {
+        heldLockId = tabId;
+        finish(true);
+        return new Promise(function () {});
+      }).catch(function () {
+        finish(false);
+      });
+    });
+  }
+
+  function ownCustomerTab(tabId) {
+    if (!navigator.locks || typeof navigator.locks.request !== "function") {
+      return Promise.resolve(false);
+    }
+    function attempt(left) {
+      return claimTabLock(tabId).then(function (owned) {
+        if (owned || left <= 0) {
+          return owned;
+        }
+        return delay(80).then(function () {
+          return attempt(left - 1);
+        });
+      });
+    }
+    return attempt(4);
+  }
+
+  function keepCustomerTab(tabId) {
+    if (!navigator.locks || typeof navigator.locks.request !== "function") {
+      return;
+    }
+    claimTabLock(tabId).then(function (owned) {
+      if (owned || customerTabId !== tabId) {
+        return;
+      }
+      delay(100).then(function () {
+        keepCustomerTab(tabId);
+      });
+    });
+  }
+
+  function prepareCustomerTab() {
+    var existing = readSessionItem("vip-customer-tab");
+    var handoff = readSessionItem("vip-customer-tab-handoff");
+    removeSessionItem("vip-customer-tab-handoff");
+    if (!existing) {
+      rememberCustomerTab(newTabId());
+      return ownCustomerTab(customerTabId).then(function () {
+        return customerTabId;
+      });
+    }
+    if (handoff && handoff === existing) {
+      rememberCustomerTab(existing);
+      stealTabLock(existing).then(function (owned) {
+        if (!owned) {
+          keepCustomerTab(existing);
+        }
+      });
+      return Promise.resolve(existing);
+    }
+    return ownCustomerTab(existing).then(function (owned) {
+      if (owned) {
+        return rememberCustomerTab(existing);
+      }
+      removeSessionItem(customerStorageKey(existing));
+      rememberCustomerTab(newTabId());
+      return ownCustomerTab(customerTabId).then(function () {
+        return customerTabId;
+      });
+    });
+  }
+
+  function authOptionsFor(tabId) {
+    if (isAdminPage()) {
+      return {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        storage: window.localStorage,
+        storageKey: "sb-riyiypsuwlnpsycobnpw-admin-auth"
+      };
+    }
+    return {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false,
-      storage: window.localStorage
+      storage: window.sessionStorage,
+      storageKey: customerStorageKey(tabId)
     };
-    if (document.body && document.body.classList.contains("admin")) {
-      authOptions.storageKey = "sb-riyiypsuwlnpsycobnpw-admin-auth";
+  }
+
+  function libraryReady() {
+    if (window.supabase && typeof window.supabase.createClient === "function") {
+      return Promise.resolve(true);
     }
-    return window.supabase.createClient(url, publishableKey, {
-      auth: authOptions
+    return new Promise(function (resolve) {
+      var waited = 0;
+      var timer = window.setInterval(function () {
+        waited += 50;
+        if ((window.supabase && typeof window.supabase.createClient === "function") || waited >= 8000) {
+          window.clearInterval(timer);
+          resolve(!!(window.supabase && typeof window.supabase.createClient === "function"));
+        }
+      }, 50);
     });
+  }
+
+  function openClient() {
+    if (client) {
+      return Promise.resolve(client);
+    }
+    if (!clientPromise) {
+      clientPromise = libraryReady().then(function (ready) {
+        if (!ready) {
+          return null;
+        }
+        var tabReady = isAdminPage() ? Promise.resolve("") : prepareCustomerTab();
+        return tabReady.then(function (tabId) {
+          return window.supabase.createClient(url, publishableKey, {
+            auth: authOptionsFor(tabId)
+          });
+        });
+      }).then(function (created) {
+        client = created || null;
+        api.client = client;
+        return client;
+      }).catch(function () {
+        clientPromise = null;
+        client = null;
+        api.client = null;
+        return null;
+      });
+    }
+    return clientPromise;
   }
 
   function classify(error) {
@@ -150,55 +396,32 @@
     return { kind: kind, message: message };
   }
 
-  function ensureClient() {
-    if (client) {
-      return client;
-    }
-    try {
-      client = createClient();
-    } catch (error) {
-      client = null;
-    }
-    api.client = client;
-    return client;
-  }
-
   function checkConnection() {
-    if (!ensureClient()) {
-      api.connected = false;
-      api.lastCheck = classify({ message: "Supabase library is not on the page." });
-      return Promise.resolve(api.lastCheck);
-    }
-    return client.from("services").select("id").limit(1).then(function (result) {
-      if (result.error || !Array.isArray(result.data)) {
+    return openClient().then(function (ready) {
+      if (!ready) {
         api.connected = false;
-        api.lastCheck = classify(result.error || { message: "Services did not return a list." });
-      } else {
-        api.connected = true;
-        api.lastCheck = { kind: "ok", message: "" };
+        api.lastCheck = classify({ message: "Supabase library is not on the page." });
+        return api.lastCheck;
       }
-      return api.lastCheck;
-    }).catch(function (error) {
-      api.connected = false;
-      api.lastCheck = classify(error);
-      return api.lastCheck;
+      return ready.from("services").select("id").limit(1).then(function (result) {
+        if (result.error || !Array.isArray(result.data)) {
+          api.connected = false;
+          api.lastCheck = classify(result.error || { message: "Services did not return a list." });
+        } else {
+          api.connected = true;
+          api.lastCheck = { kind: "ok", message: "" };
+        }
+        return api.lastCheck;
+      }).catch(function (error) {
+        api.connected = false;
+        api.lastCheck = classify(error);
+        return api.lastCheck;
+      });
     });
   }
 
   function whenReady() {
-    if (ensureClient()) {
-      return Promise.resolve(client);
-    }
-    return new Promise(function (resolve) {
-      var waited = 0;
-      var timer = window.setInterval(function () {
-        waited += 50;
-        if (ensureClient() || waited >= 8000) {
-          window.clearInterval(timer);
-          resolve(client);
-        }
-      }, 50);
-    });
+    return openClient();
   }
 
   function messageFor(error) {
@@ -503,7 +726,8 @@
     },
     signOut: function () {
       return withClient(function (ready) {
-        return ready.auth.signOut().then(function () {
+        var signedOut = isAdminPage() ? ready.auth.signOut() : ready.auth.signOut({ scope: "local" });
+        return signedOut.then(function () {
           return true;
         });
       });
