@@ -119,17 +119,30 @@
           if (!serverMode || !result || result.error || result.stale) {
             return;
           }
-          refreshLists();
+          return loadHiddenIds().then(function (hidden) {
+            if (!serverMode) {
+              return;
+            }
+            if (hidden && hidden.error) {
+              setFeedback(hidden.error);
+              return;
+            }
+            refreshLists();
+          });
         });
       });
     }
     window.VIP_ORDERS.reloadAccount().then(function (result) {
-      if (result && result.error) {
-        setFeedback(result.error);
-      }
-      if (typeof refreshLists === "function") {
-        refreshLists();
-      }
+      return loadHiddenIds().then(function (hidden) {
+        if (result && result.error) {
+          setFeedback(result.error);
+        } else if (hidden && hidden.error) {
+          setFeedback(hidden.error);
+        }
+        if (typeof refreshLists === "function") {
+          refreshLists();
+        }
+      });
     });
   }
 
@@ -209,6 +222,7 @@
   var openOrder = "";
   var cancelId = "";
   var deleteId = "";
+  var hiddenIds = {};
 
   function each(list, fn) {
     Array.prototype.forEach.call(list, fn);
@@ -948,7 +962,7 @@
     }
   }
 
-  function compactCard(order, actions) {
+  function compactCard(order, actions, mode) {
     var customer = order.customer || {};
     var card = document.createElement("article");
     var toggle = document.createElement("button");
@@ -961,7 +975,9 @@
     var expanded = openOrder === order.id;
     var status = statusNames[order.status] ? order.status : "pending";
     card.className = "admin-compact is-" + status;
-    card.appendChild(deleteMark(order));
+    if (mode !== "hidden") {
+      card.appendChild(deleteMark(order));
+    }
     toggle.type = "button";
     toggle.className = "admin-compact__toggle";
     toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
@@ -984,6 +1000,7 @@
       paintOrders();
       paintDay();
       paintPending();
+      paintHidden();
     });
     body.className = "admin-compact__body";
     body.hidden = !expanded;
@@ -1050,7 +1067,7 @@
     button.type = "button";
     button.className = "admin-compact__delete";
     button.textContent = "×";
-    button.setAttribute("aria-label", "מחיקת תור");
+    button.setAttribute("aria-label", "הסתרת תור");
     button.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -1067,7 +1084,7 @@
     }
     label.textContent = weekNames[dayCursor.getDay()] + ", " + dayCursor.getDate() + " ב" + months[dayCursor.getMonth()];
     var items = ordersApi.read().filter(function (order) {
-      return order.date === iso(dayCursor) && order.status !== "rejected" && order.status !== "cancelled";
+      return order.date === iso(dayCursor) && order.status !== "rejected" && order.status !== "cancelled" && !isHiddenOrder(order);
     }).sort(function (a, b) {
       return String(a.time || "").localeCompare(String(b.time || ""));
     });
@@ -1090,6 +1107,9 @@
     var query = search ? search.value.trim() : "";
     return ordersApi.read().filter(function (order) {
       var customer = order.customer || {};
+      if (isHiddenOrder(order)) {
+        return false;
+      }
       if (statusValue !== "all" && order.status !== statusValue) {
         return false;
       }
@@ -1127,7 +1147,7 @@
       return;
     }
     var items = ordersApi.read().filter(function (order) {
-      return order.status === "pending";
+      return order.status === "pending" && !isHiddenOrder(order);
     });
     list.textContent = "";
     if (!items.length) {
@@ -1146,6 +1166,37 @@
       if (actions) {
         card.appendChild(actions);
       }
+      list.appendChild(card);
+    });
+  }
+
+  function paintHidden() {
+    var list = document.getElementById("hidden-list");
+    var items;
+    if (!list) {
+      return;
+    }
+    items = ordersApi.read().filter(function (order) {
+      return isHiddenOrder(order);
+    });
+    list.textContent = "";
+    if (!items.length) {
+      paragraph(list, "אין תורים מוסתרים.", "orders-empty");
+      return;
+    }
+    items.forEach(function (order) {
+      var card = compactCard(order, null, "hidden");
+      var actions = document.createElement("div");
+      var button = document.createElement("button");
+      actions.className = "admin-actions";
+      button.type = "button";
+      button.className = "btn btn--ghost";
+      button.textContent = "הצג שוב";
+      button.addEventListener("click", function () {
+        restoreOrder(order.id, button);
+      });
+      actions.appendChild(button);
+      card.appendChild(actions);
       list.appendChild(card);
     });
   }
@@ -1232,13 +1283,105 @@
     if (day) {
       day.textContent = text;
     }
+    var hidden = document.getElementById("hidden-feedback");
+    if (hidden) {
+      hidden.textContent = text;
+    }
+  }
+
+  function isHiddenOrder(order) {
+    return !!(order && order.id && hiddenIds[order.id]);
+  }
+
+  function rememberHiddenIds(ids) {
+    var next = {};
+    (ids || []).forEach(function (id) {
+      if (id) {
+        next[id] = true;
+      }
+    });
+    hiddenIds = next;
+  }
+
+  function loadHiddenIds() {
+    var auth = window.VIP_SUPABASE;
+    if (!auth || !auth.hiddenOrderIds) {
+      return Promise.resolve({ error: "לא הצלחנו לטעון את התורים המוסתרים." });
+    }
+    return auth.hiddenOrderIds().then(function (result) {
+      if (!result || result.error) {
+        return { error: result && result.error ? result.error : "לא הצלחנו לטעון את התורים המוסתרים." };
+      }
+      rememberHiddenIds(result.ids);
+      return { error: "" };
+    }).catch(function () {
+      return { error: "לא הצלחנו לטעון את התורים המוסתרים." };
+    });
   }
 
   function refreshLists() {
     paintDay();
     paintOrders();
     paintPending();
+    paintHidden();
     paintNotices();
+  }
+
+  function restoreOrder(id, button) {
+    var auth = window.VIP_SUPABASE;
+    if (!id || actionBusy) {
+      if (actionBusy) {
+        setFeedback("הפעולה הקודמת עדיין מתבצעת.");
+      }
+      return;
+    }
+    if (!auth || !auth.unhideOrder) {
+      setFeedback("לא הצלחנו להחזיר את התור. נסו שוב בעוד רגע.");
+      return;
+    }
+    actionBusy = true;
+    if (button) {
+      button.disabled = true;
+    }
+    auth.unhideOrder(id).then(function (result) {
+      function unlock() {
+        actionBusy = false;
+        if (button) {
+          button.disabled = false;
+        }
+      }
+      function fail(message) {
+        unlock();
+        setFeedback(message || "לא הצלחנו להחזיר את התור. נסו שוב בעוד רגע.");
+      }
+      if (!result || result.error || !result.shown) {
+        fail(result && result.error);
+        return;
+      }
+      var previousIds = hiddenIds;
+      loadHiddenIds().then(function (hidden) {
+        if (hidden && hidden.error) {
+          fail(hidden.error);
+          return;
+        }
+        if (hiddenIds[id]) {
+          hiddenIds = previousIds;
+          fail("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
+          return;
+        }
+        unlock();
+        refreshLists();
+        setFeedback("התור חזר לרשימות.");
+      }).catch(function () {
+        fail("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
+      });
+    }).catch(function () {
+      actionBusy = false;
+      if (button) {
+        button.disabled = false;
+      }
+      setFeedback("לא הצלחנו להחזיר את התור. נסו שוב בעוד רגע.");
+    });
   }
 
   function askDelete(order) {
@@ -1279,7 +1422,7 @@
 
   function showPanel(name) {
     var aliases = { dashboard: "day", requests: "pending", calendar: "hours", approved: "orders" };
-    var panels = { day: true, orders: true, pending: true, settings: true };
+    var panels = { day: true, orders: true, pending: true, hidden: true, settings: true };
     if (name === "hours" || name === "calendar") {
       name = "settings";
     }
@@ -1302,7 +1445,7 @@
     if (name === "settings") {
       renderWeek();
     }
-    if (name === "day" || name === "orders" || name === "pending") {
+    if (name === "day" || name === "orders" || name === "pending" || name === "hidden") {
       refreshLists();
     }
     try {
@@ -1512,63 +1655,49 @@
     if (!id || actionBusy) {
       return;
     }
-    if (!auth || !auth.deleteOrder) {
-      setFeedback("לא הצלחנו למחוק את התור. נסו שוב בעוד רגע.");
+    if (!auth || !auth.hideOrder) {
+      setFeedback("לא הצלחנו להסתיר את התור. נסו שוב בעוד רגע.");
       return;
     }
     actionBusy = true;
     yes.disabled = true;
-    auth.deleteOrder(id).then(function (result) {
+    auth.hideOrder(id).then(function (result) {
       function unlock() {
         actionBusy = false;
         yes.disabled = false;
       }
-      if (result && result.deleted) {
-        var reload = ordersApi.reloadAccount ? ordersApi.reloadAccount() : Promise.resolve(null);
-        reload.then(function (loaded) {
-          unlock();
-          closeDelete();
-          var still = ordersApi.read().some(function (order) {
-            return order.id === id;
-          });
-          if (loaded && loaded.stale) {
-            return;
-          }
-          if (still) {
-            setFeedback("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
-            return;
-          }
-          refreshLists();
-          setFeedback("התור נמחק.");
-        }).catch(function () {
-          unlock();
-          closeDelete();
-          setFeedback("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
-        });
+      function fail(message) {
+        unlock();
+        closeDelete();
+        setFeedback(message || "לא הצלחנו להסתיר את התור. נסו שוב בעוד רגע.");
+      }
+      if (!result || result.error || !result.hidden) {
+        fail(result && result.error);
         return;
       }
-      if (result && result.gone) {
-        var again = ordersApi.reloadAccount ? ordersApi.reloadAccount() : Promise.resolve(null);
-        again.then(function () {
-          unlock();
-          closeDelete();
-          refreshLists();
-          setFeedback(result.error || "התור כבר לא קיים.");
-        }).catch(function () {
-          unlock();
-          closeDelete();
-          setFeedback(result.error || "התור כבר לא קיים.");
-        });
-        return;
-      }
-      unlock();
-      closeDelete();
-      setFeedback(result && result.error ? result.error : "לא הצלחנו למחוק את התור. נסו שוב בעוד רגע.");
+      var previousIds = hiddenIds;
+      loadHiddenIds().then(function (hidden) {
+        if (hidden && hidden.error) {
+          fail(hidden.error);
+          return;
+        }
+        if (!hiddenIds[id]) {
+          hiddenIds = previousIds;
+          fail("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
+          return;
+        }
+        unlock();
+        closeDelete();
+        refreshLists();
+        setFeedback("התור הוסתר.");
+      }).catch(function () {
+        fail("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
+      });
     }).catch(function () {
       actionBusy = false;
       yes.disabled = false;
       closeDelete();
-      setFeedback("לא הצלחנו למחוק את התור. נסו שוב בעוד רגע.");
+      setFeedback("לא הצלחנו להסתיר את התור. נסו שוב בעוד רגע.");
     });
   });
   document.getElementById("biz-service").addEventListener("input", function () {

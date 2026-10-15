@@ -1002,6 +1002,82 @@
         });
       });
     },
+    hideOrder: function (id) {
+      return blockAdminCustomer({ hidden: false, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return freshToken(ready).then(function (token) {
+            if (!token) {
+              return { hidden: false, error: "ההתחברות עדיין נטענת. נסו שוב בעוד רגע." };
+            }
+            return ready.rpc("admin_hide_order", { p_id: id }).then(function (result) {
+              if (result && result.error) {
+                return { hidden: false, error: messageFor(result.error) };
+              }
+              return { hidden: true, error: "" };
+            }).catch(function () {
+              return { hidden: false, error: "לא הצלחנו להסתיר את התור. נסו שוב בעוד רגע." };
+            });
+          });
+        });
+      });
+    },
+    unhideOrder: function (id) {
+      return blockAdminCustomer({ shown: false, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return freshToken(ready).then(function (token) {
+            if (!token) {
+              return { shown: false, error: "ההתחברות עדיין נטענת. נסו שוב בעוד רגע." };
+            }
+            return ready.rpc("admin_unhide_order", { p_id: id }).then(function (result) {
+              if (result && result.error) {
+                return { shown: false, error: messageFor(result.error) };
+              }
+              return { shown: true, error: "" };
+            }).catch(function () {
+              return { shown: false, error: "לא הצלחנו להחזיר את התור. נסו שוב בעוד רגע." };
+            });
+          });
+        });
+      });
+    },
+    hiddenOrderIds: function () {
+      return blockAdminCustomer({ ids: [], error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return freshToken(ready).then(function (token) {
+            if (!token) {
+              return { ids: [], error: "ההתחברות עדיין נטענת. נסו שוב בעוד רגע." };
+            }
+            return ready.rpc("admin_hidden_order_ids").then(function (result) {
+              var ids = [];
+              if (result && result.error) {
+                return { ids: [], error: messageFor(result.error) };
+              }
+              (result && result.data ? result.data : []).forEach(function (row) {
+                if (typeof row === "string") {
+                  ids.push(row);
+                } else if (row && row.admin_hidden_order_ids) {
+                  ids.push(row.admin_hidden_order_ids);
+                } else if (row && row.order_id) {
+                  ids.push(row.order_id);
+                }
+              });
+              return { ids: ids, error: "" };
+            }).catch(function () {
+              return { ids: [], error: "לא הצלחנו לטעון את התורים המוסתרים." };
+            });
+          });
+        });
+      });
+    },
     fetchCatalog: function () {
       return withClient(function (ready) {
         return ready.from("services").select("id, name, price_ils, minutes, addon, active").then(function (result) {

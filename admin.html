@@ -64,6 +64,7 @@
       <button type="button" data-admin-panel="day">הלוז היומי שלי</button>
       <button type="button" data-admin-panel="orders">כל ההזמנות</button>
       <button type="button" data-admin-panel="pending">ממתינות לאישור</button>
+      <button type="button" data-admin-panel="hidden">תורים מוסתרים</button>
       <button type="button" data-admin-panel="settings">הגדרות</button>
     </nav>
 
@@ -180,6 +181,12 @@
       <div id="pending-list"></div>
     </section>
 
+    <section class="admin-panel" data-admin-section="hidden" hidden aria-labelledby="hidden-title">
+      <h1 id="hidden-title">תורים מוסתרים</h1>
+      <p id="hidden-feedback" class="admin-feedback" role="status"></p>
+      <div id="hidden-list"></div>
+    </section>
+
     <noscript>
       <p class="admin-note">העמוד לא זמין כרגע.</p>
     </noscript>
@@ -192,10 +199,10 @@
     <button type="button" class="btn btn--ghost" id="admin-confirm-no">חזרה בלי ביטול</button>
   </dialog>
   <dialog class="admin-dialog" id="admin-delete" aria-labelledby="admin-delete-title">
-    <h2 id="admin-delete-title">מחיקת תור</h2>
+    <h2 id="admin-delete-title">הסתרת תור</h2>
     <p id="admin-delete-details"></p>
-    <p>האם אתה בטוח שברצונך למחוק את התור לצמיתות? לא ניתן יהיה לשחזר אותו.</p>
-    <button type="button" class="btn btn--gold" id="admin-delete-yes">כן, למחוק לצמיתות</button>
+    <p>התור יוסתר מרשימות הניהול. הוא יישאר אצל הלקוח, ואפשר להציג אותו שוב.</p>
+    <button type="button" class="btn btn--gold" id="admin-delete-yes">כן, להסתיר</button>
     <button type="button" class="btn btn--ghost" id="admin-delete-no">ביטול</button>
   </dialog>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
