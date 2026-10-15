@@ -495,15 +495,44 @@
     },
     orderAction: function (name, id) {
       return withClient(function (ready) {
+        var wanted = name === "approve_order" ? "approved" : name === "reject_order" ? "rejected" : "";
+        function unverified() {
+          return { error: "לא ניתן לאמת את תוצאת הפעולה. בדקו את רשימת ההזמנות." };
+        }
+        function confirmAfterError(rpcError) {
+          return ready.from("orders").select("status").eq("id", id).maybeSingle().then(function (result) {
+            var status = result && result.data ? result.data.status : "";
+            if (!status) {
+              return unverified();
+            }
+            if (status === wanted) {
+              return { error: "" };
+            }
+            if (status === "pending") {
+              return { error: rpcError };
+            }
+            return unverified();
+          }).catch(function () {
+            return unverified();
+          });
+        }
         function send() {
           return ready.rpc(name, { p_id: id }).then(function (result) {
             if (result.error) {
+              if (wanted) {
+                return confirmAfterError(messageFor(result.error));
+              }
               return { error: messageFor(result.error) };
             }
             return { error: "" };
+          }).catch(function () {
+            if (wanted) {
+              return confirmAfterError("הפעולה נכשלה.");
+            }
+            return { error: "הפעולה נכשלה." };
           });
         }
-        if (name !== "approve_order" && name !== "reject_order") {
+        if (!wanted) {
           return send();
         }
         return sessionToken(ready).then(function (token) {
