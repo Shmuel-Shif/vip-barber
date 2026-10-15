@@ -1654,6 +1654,8 @@
   var accountFailed = false;
   var signedIn = false;
   var accessReady = false;
+  var accountUserId = "";
+  var ordersLive = false;
   var ordersFeedback = document.getElementById("orders-feedback");
 
   function sayOrders(text) {
@@ -1834,6 +1836,43 @@
   }
 
   if (list) {
+    function refreshOrdersQuiet() {
+      if (!signedIn || !accountUserId || !orders.reloadAccount) {
+        return null;
+      }
+      return orders.reloadAccount().then(function (loaded) {
+        if (!signedIn || !accountUserId) {
+          return;
+        }
+        if (!loaded || loaded.error) {
+          return;
+        }
+        accountFailed = false;
+        if (orders.keepOwn) {
+          orders.keepOwn(accountUserId);
+        }
+        sayOrders("");
+        paint(list, false);
+      });
+    }
+
+    function ensureOrdersLive() {
+      var liveAuth = window.VIP_SUPABASE;
+      if (ordersLive || !accountUserId || !liveAuth || !liveAuth.watchOrders) {
+        return;
+      }
+      ordersLive = true;
+      liveAuth.watchOrders(refreshOrdersQuiet);
+    }
+
+    function stopOrdersLive() {
+      ordersLive = false;
+      accountUserId = "";
+      if (window.VIP_SUPABASE && window.VIP_SUPABASE.stopOrdersWatch) {
+        window.VIP_SUPABASE.stopOrdersWatch();
+      }
+    }
+
     function loadOwnOrders() {
       var auth = window.VIP_SUPABASE;
       if (!auth || !auth.profile || !orders.reloadAccount) {
@@ -1850,6 +1889,7 @@
         if (!result || !result.session || !result.session.user) {
           signedIn = false;
           accessReady = true;
+          stopOrdersLive();
           accountFailed = !!(result && result.error);
           if (orders.forgetAccount) {
             orders.forgetAccount();
@@ -1860,6 +1900,8 @@
         }
         signedIn = true;
         accessReady = true;
+        accountUserId = result.session.user.id;
+        ensureOrdersLive();
         return orders.reloadAccount().then(function (loaded) {
           if (!loaded || loaded.error) {
             accountFailed = true;
@@ -1896,6 +1938,7 @@
       signedIn = false;
       accessReady = true;
       accountFailed = false;
+      stopOrdersLive();
       if (orders.forgetAccount) {
         orders.forgetAccount();
       }

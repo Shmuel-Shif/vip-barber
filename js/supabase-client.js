@@ -12,6 +12,92 @@
   var url = "https://riyiypsuwlnpsycobnpw.supabase.co";
   var publishableKey = "sb_publishable_96PIIh6eTsAh9KXV4aHhSA_Kqwb67V2";
   var client = null;
+  var ordersWatch = {
+    generation: 0,
+    channel: null,
+    timer: null,
+    pending: null,
+    handler: null,
+    busy: false,
+    again: false,
+    stopped: true
+  };
+
+  function clearOrdersTimer() {
+    if (ordersWatch.timer) {
+      window.clearInterval(ordersWatch.timer);
+      ordersWatch.timer = null;
+    }
+    if (ordersWatch.pending) {
+      window.clearTimeout(ordersWatch.pending);
+      ordersWatch.pending = null;
+    }
+  }
+
+  function pokeOrdersWatch() {
+    if (ordersWatch.stopped || typeof ordersWatch.handler !== "function") {
+      return;
+    }
+    if (ordersWatch.pending) {
+      window.clearTimeout(ordersWatch.pending);
+    }
+    ordersWatch.pending = window.setTimeout(function () {
+      ordersWatch.pending = null;
+      if (ordersWatch.stopped || typeof ordersWatch.handler !== "function") {
+        return;
+      }
+      if (ordersWatch.busy) {
+        ordersWatch.again = true;
+        return;
+      }
+      ordersWatch.busy = true;
+      Promise.resolve().then(ordersWatch.handler).catch(function () {
+        return null;
+      }).then(function () {
+        ordersWatch.busy = false;
+        if (ordersWatch.again && !ordersWatch.stopped) {
+          ordersWatch.again = false;
+          pokeOrdersWatch();
+        }
+      });
+    }, 400);
+  }
+
+  function ensureOrdersPoll(generation) {
+    if (ordersWatch.stopped || generation !== ordersWatch.generation || ordersWatch.timer) {
+      return;
+    }
+    ordersWatch.timer = window.setInterval(pokeOrdersWatch, 60000);
+  }
+
+  function sessionToken(ready) {
+    return ready.auth.getSession().then(function (result) {
+      var session = result && result.data && result.data.session;
+      if ((result && result.error) || !session || !session.access_token) {
+        return "";
+      }
+      return session.access_token;
+    });
+  }
+
+  function applyRealtimeAuth(ready, token) {
+    if (!token || !ready.realtime || typeof ready.realtime.setAuth !== "function") {
+      return Promise.resolve();
+    }
+    try {
+      var result = ready.realtime.setAuth(token);
+      if (result && typeof result.then === "function") {
+        return result.then(function () {
+          return null;
+        }).catch(function () {
+          return null;
+        });
+      }
+    } catch (error) {
+      return Promise.resolve();
+    }
+    return Promise.resolve();
+  }
 
   function createClient() {
     if (!window.supabase || typeof window.supabase.createClient !== "function") {
@@ -409,11 +495,22 @@
     },
     orderAction: function (name, id) {
       return withClient(function (ready) {
-        return ready.rpc(name, { p_id: id }).then(function (result) {
-          if (result.error) {
-            return { error: messageFor(result.error) };
+        function send() {
+          return ready.rpc(name, { p_id: id }).then(function (result) {
+            if (result.error) {
+              return { error: messageFor(result.error) };
+            }
+            return { error: "" };
+          });
+        }
+        if (name !== "approve_order" && name !== "reject_order") {
+          return send();
+        }
+        return sessionToken(ready).then(function (token) {
+          if (!token) {
+            return { error: "ההתחברות עדיין נטענת. נסו שוב בעוד רגע." };
           }
-          return { error: "" };
+          return send();
         });
       });
     },
@@ -539,6 +636,83 @@
           return { rows: result.data || [], error: "" };
         });
       });
+    },
+    watchOrders: function (handler) {
+      ordersWatch.handler = handler;
+      ordersWatch.stopped = false;
+      ordersWatch.again = false;
+      return withClient(function (ready) {
+        function start(token) {
+          var generation;
+          if (ordersWatch.stopped || !token) {
+            return { error: "" };
+          }
+          ordersWatch.generation += 1;
+          generation = ordersWatch.generation;
+          clearOrdersTimer();
+          if (ordersWatch.channel) {
+            var previous = ordersWatch.channel;
+            ordersWatch.channel = null;
+            ready.removeChannel(previous);
+          }
+          return applyRealtimeAuth(ready, token).then(function () {
+            if (generation !== ordersWatch.generation || ordersWatch.stopped) {
+              return { error: "" };
+            }
+            ensureOrdersPoll(generation);
+            ordersWatch.channel = ready.channel("vip-orders-sync-" + generation).on("postgres_changes", {
+              event: "*",
+              schema: "public",
+              table: "orders"
+            }, function () {
+              if (generation !== ordersWatch.generation || ordersWatch.stopped) {
+                return;
+              }
+              pokeOrdersWatch();
+            }).subscribe(function (status) {
+              if (generation !== ordersWatch.generation || ordersWatch.stopped) {
+                return;
+              }
+              if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+                ensureOrdersPoll(generation);
+              }
+            });
+            return { error: "" };
+          });
+        }
+        return sessionToken(ready).then(function (token) {
+          if (token) {
+            return start(token);
+          }
+          return new Promise(function (resolve) {
+            window.setTimeout(function () {
+              if (ordersWatch.stopped) {
+                resolve({ error: "" });
+                return;
+              }
+              sessionToken(ready).then(function (later) {
+                resolve(start(later));
+              });
+            }, 500);
+          });
+        });
+      });
+    },
+    stopOrdersWatch: function () {
+      ordersWatch.stopped = true;
+      ordersWatch.handler = null;
+      ordersWatch.again = false;
+      ordersWatch.busy = false;
+      ordersWatch.generation += 1;
+      clearOrdersTimer();
+      if (ordersWatch.channel && client) {
+        var previous = ordersWatch.channel;
+        ordersWatch.channel = null;
+        client.removeChannel(previous);
+      } else {
+        ordersWatch.channel = null;
+      }
+      return Promise.resolve({ error: "" });
     }
   };
   window.VIP_SUPABASE = api;

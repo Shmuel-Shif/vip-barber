@@ -79,6 +79,9 @@
     if (window.VIP_ORDERS && window.VIP_ORDERS.watchServer) {
       window.VIP_ORDERS.watchServer(false);
     }
+    if (window.VIP_SUPABASE && window.VIP_SUPABASE.stopOrdersWatch) {
+      window.VIP_SUPABASE.stopOrdersWatch();
+    }
     document.body.classList.add("admin-locked");
     if (login) {
       login.hidden = false;
@@ -107,6 +110,19 @@
       return;
     }
     window.VIP_ORDERS.watchServer(true);
+    if (window.VIP_SUPABASE && window.VIP_SUPABASE.watchOrders) {
+      window.VIP_SUPABASE.watchOrders(function () {
+        if (!serverMode || !window.VIP_ORDERS || !window.VIP_ORDERS.reloadAccount) {
+          return null;
+        }
+        return window.VIP_ORDERS.reloadAccount().then(function (result) {
+          if (!serverMode || !result || result.error) {
+            return;
+          }
+          refreshLists();
+        });
+      });
+    }
     window.VIP_ORDERS.reloadAccount().then(function (result) {
       if (result && result.error) {
         setFeedback(result.error);
