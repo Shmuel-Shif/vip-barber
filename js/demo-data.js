@@ -265,35 +265,20 @@ window.VIP_SCHEDULE = {
     return result;
   }
 
-  function serviceMinutes(id) {
-    var services = window.VIP_DEMO && window.VIP_DEMO.services ? window.VIP_DEMO.services : [];
-    var found = null;
-    services.forEach(function (service) {
-      if (service.id === id && service.minutes !== null && service.minutes !== undefined && !isNaN(Number(service.minutes))) {
-        found = Number(service.minutes);
-      }
-    });
-    return found;
-  }
-
   function visitMinutes() {
     var booking = window.VIP_BOOKING && window.VIP_BOOKING.read ? window.VIP_BOOKING.read() : null;
     var adults = booking ? Number(booking.adults) || 0 : 0;
     var children = booking ? Number(booking.children) || 0 : 0;
     var beards = booking ? Number(booking.beards) || 0 : 0;
-    var mens = serviceMinutes("mens-haircut");
-    var kids = serviceMinutes("kids-haircut");
-    var beard = serviceMinutes("beard");
+    var service = schedule.serviceMinutes;
     var travel = schedule.travelMinutes;
-    var service;
     if (!booking || adults < 0 || children < 0 || beards < 0 || adults + children < 2 || adults > 20 || children > 20 || beards > adults) {
       return null;
     }
-    if (mens === null || kids === null || beard === null || typeof travel !== "number") {
+    if (typeof service !== "number" || typeof travel !== "number") {
       return null;
     }
-    service = (mens * adults) + (kids * children) + (beard * beards);
-    if (service < 10 || service > 600 || travel < 0 || travel > 180) {
+    if (service < 10 || service > 180 || travel < 0 || travel > 180) {
       return null;
     }
     return { service: service, travel: travel };
@@ -392,7 +377,8 @@ window.VIP_SCHEDULE = {
       if (!visit || closeAt === null) {
         return [];
       }
-      slots = slotsStepped(day.start, day.end, visit.service + visit.travel);
+      // Offered starts are 70 minutes apart. A visit still blocks only its service length plus travel.
+      slots = slotsStepped(day.start, day.end, 70);
       slots = slots.filter(function (slot) {
         var start = minutes(slot);
         return start !== null && start < closeAt && !overlapsBreak(slot, day.breaks, visit.service) && !overlapsBlocked(slot, day.blocked, visit.service);
@@ -475,6 +461,7 @@ window.VIP_SCHEDULE = {
   schedule.unavailable = false;
   schedule.loadError = "";
   schedule.fitVisit = false;
+  schedule.serviceMinutes = null;
   schedule.travelMinutes = null;
   schedule.applyRemote = function (payload, busyRows) {
     var standing = {};
@@ -507,7 +494,8 @@ window.VIP_SCHEDULE = {
     });
     schedule.remote = { standing: standing, weeks: weeks, exceptions: exceptions };
     schedule.busyRanges = ranges;
-    schedule.travelMinutes = payload.travelMinutes;
+    schedule.serviceMinutes = typeof payload.serviceMinutes === "number" ? payload.serviceMinutes : null;
+    schedule.travelMinutes = typeof payload.travelMinutes === "number" ? payload.travelMinutes : null;
     schedule.unavailable = false;
     schedule.loadError = "";
     if (schedule.onChange) {

@@ -3173,6 +3173,61 @@ body.home .header-auth {
   font-size: 0.8rem;
 }
 
+.header-auth-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+}
+
+.header-auth-group .header-auth {
+  margin-inline-start: 0;
+}
+
+a.header-admin-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+body.admin-as-customer {
+  height: auto;
+  overflow: auto;
+}
+
+body.admin-as-customer .header-user {
+  max-width: 9rem;
+}
+
+body.admin-as-customer main > :not(.admin-customer-note) {
+  display: none;
+}
+
+body.admin-as-customer .hold-timer {
+  display: none;
+}
+
+.admin-customer-note {
+  box-sizing: border-box;
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: calc(var(--header-height) + 1.5rem) 1.25rem 2rem;
+  text-align: center;
+}
+
+.admin-customer-note p {
+  margin: 0 0 1rem;
+  color: var(--gold-light);
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.admin-customer-note .btn {
+  margin: 0.3rem;
+}
+
 .auth-modal .field {
   margin-top: 0.75rem;
   text-align: right;

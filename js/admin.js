@@ -116,7 +116,7 @@
           return null;
         }
         return window.VIP_ORDERS.reloadAccount().then(function (result) {
-          if (!serverMode || !result || result.error) {
+          if (!serverMode || !result || result.error || result.stale) {
             return;
           }
           refreshLists();
@@ -678,7 +678,11 @@
         return false;
       }
       schedule.applyRemote(result.schedule, []);
+      var serviceInput = document.getElementById("biz-service");
       var travelInput = document.getElementById("biz-travel");
+      if (serviceInput && typeof schedule.serviceMinutes === "number" && serviceInput.getAttribute("data-touched") !== "true") {
+        serviceInput.value = String(schedule.serviceMinutes);
+      }
       if (travelInput && typeof schedule.travelMinutes === "number" && travelInput.getAttribute("data-touched") !== "true") {
         travelInput.value = String(schedule.travelMinutes);
       }
@@ -1011,13 +1015,17 @@
       approve.className = "btn btn--gold";
       approve.textContent = "אישור";
       approve.addEventListener("click", function () {
-        applyOrderAction(ordersApi.approve(order.id), "התור סומן כמאושר במכשיר זה בלבד. לא נשלחה התראה.", "התור אושר בשרת. לא נשלחה התראה.");
+        applyOrderAction(function () {
+          return ordersApi.approve(order.id);
+        }, "התור סומן כמאושר במכשיר זה בלבד. לא נשלחה התראה.", "התור אושר בשרת. לא נשלחה התראה.");
       });
       reject.type = "button";
       reject.className = "btn btn--ghost";
       reject.textContent = "דחייה";
       reject.addEventListener("click", function () {
-        applyOrderAction(ordersApi.reject(order.id), "הבקשה סומנה כנדחתה במכשיר זה בלבד. לא נשלחה התראה.", "הבקשה נדחתה בשרת. לא נשלחה התראה.");
+        applyOrderAction(function () {
+          return ordersApi.reject(order.id);
+        }, "הבקשה סומנה כנדחתה במכשיר זה בלבד. לא נשלחה התראה.", "הבקשה נדחתה בשרת. לא נשלחה התראה.");
       });
       row.appendChild(approve);
       row.appendChild(reject);
@@ -1157,18 +1165,42 @@
     });
   }
 
+  var actionBusy = false;
+
   function applyOrderAction(result, localText, serverText) {
+    if (typeof result === "function") {
+      if (actionBusy) {
+        setFeedback("הפעולה הקודמת עדיין נשלחת.");
+        return;
+      }
+      actionBusy = true;
+      try {
+        result = result();
+      } catch (error) {
+        actionBusy = false;
+        setFeedback("הפעולה נכשלה.");
+        return;
+      }
+    }
     if (result && typeof result.then === "function") {
       result.then(function (outcome) {
+        actionBusy = false;
+        if (outcome && outcome.status) {
+          refreshLists();
+        }
         if (!outcome || outcome.error) {
           setFeedback(outcome && outcome.error ? outcome.error : "הפעולה נכשלה.");
           return;
         }
         setFeedback(serverText);
         refreshLists();
+      }).catch(function () {
+        actionBusy = false;
+        setFeedback("הפעולה נכשלה.");
       });
       return;
     }
+    actionBusy = false;
     setFeedback(localText);
     refreshLists();
   }
@@ -1283,7 +1315,6 @@
   function fillSettings() {
     var form = document.getElementById("business-form");
     var data = readSettings();
-    var travel = 10;
     if (!form) {
       return;
     }
@@ -1300,12 +1331,14 @@
         }
       });
     }
-    if (window.VIP_SCHEDULE && typeof window.VIP_SCHEDULE.travelMinutes === "number") {
-      travel = window.VIP_SCHEDULE.travelMinutes;
+    var serviceInput = document.getElementById("biz-service");
+    var travelInput = document.getElementById("biz-travel");
+    if (serviceInput && window.VIP_SCHEDULE && typeof window.VIP_SCHEDULE.serviceMinutes === "number" && serviceInput.getAttribute("data-touched") !== "true") {
+      serviceInput.value = String(window.VIP_SCHEDULE.serviceMinutes);
     }
-    document.getElementById("biz-cut-men").value = String(data.services["mens-haircut"] && data.services["mens-haircut"].minutes >= 10 ? data.services["mens-haircut"].minutes : 30);
-    document.getElementById("biz-cut-kids").value = String(data.services["kids-haircut"] && data.services["kids-haircut"].minutes >= 10 ? data.services["kids-haircut"].minutes : 30);
-    document.getElementById("biz-travel").value = String(travel);
+    if (travelInput && window.VIP_SCHEDULE && typeof window.VIP_SCHEDULE.travelMinutes === "number" && travelInput.getAttribute("data-touched") !== "true") {
+      travelInput.value = String(window.VIP_SCHEDULE.travelMinutes);
+    }
     each(form.querySelectorAll("[data-service]"), function (input) {
       var service = data.services[input.getAttribute("data-service")];
       if (!service || input.getAttribute("data-field") !== "price") {
@@ -1409,7 +1442,9 @@
   document.getElementById("admin-confirm-yes").addEventListener("click", function () {
     var dialog = document.getElementById("admin-confirm");
     if (cancelId) {
-      applyOrderAction(ordersApi.cancel(cancelId, { by: "admin" }), "התור סומן כבוטל במכשיר זה בלבד. לא נשלחה התראה.", "התור בוטל בשרת. לא נשלחה התראה.");
+      applyOrderAction(function () {
+        return ordersApi.cancel(cancelId, { by: "admin" });
+      }, "התור סומן כבוטל במכשיר זה בלבד. לא נשלחה התראה.", "התור בוטל בשרת. לא נשלחה התראה.");
       cancelId = "";
     }
     dialog.close();
@@ -1417,6 +1452,9 @@
   document.getElementById("admin-confirm-no").addEventListener("click", function () {
     cancelId = "";
     document.getElementById("admin-confirm").close();
+  });
+  document.getElementById("biz-service").addEventListener("input", function () {
+    this.setAttribute("data-touched", "true");
   });
   document.getElementById("biz-travel").addEventListener("input", function () {
     this.setAttribute("data-touched", "true");
@@ -1439,42 +1477,17 @@
   document.getElementById("business-form").addEventListener("submit", function (event) {
     var message = document.getElementById("biz-status");
     var current = readSettings();
-    var mensCut = Number(document.getElementById("biz-cut-men").value);
-    var kidsCut = Number(document.getElementById("biz-cut-kids").value);
+    var serviceMinutes = Number(document.getElementById("biz-service").value);
     var travel = Number(document.getElementById("biz-travel").value);
-    var beardMinutes = 10;
     var invalid = false;
     event.preventDefault();
-    if (!(mensCut >= 10 && mensCut <= 180) || mensCut !== Math.round(mensCut)) {
-      message.textContent = "זמן תספורת הגברים צריך להיות בין 10 ל־180 דקות.";
-      return;
-    }
-    if (!(kidsCut >= 10 && kidsCut <= 180) || kidsCut !== Math.round(kidsCut)) {
-      message.textContent = "זמן תספורת הילדים צריך להיות בין 10 ל־180 דקות.";
+    if (!(serviceMinutes >= 10 && serviceMinutes <= 180) || serviceMinutes !== Math.round(serviceMinutes)) {
+      message.textContent = "משך השירות צריך להיות בין 10 ל־180 דקות.";
       return;
     }
     if (!(travel >= 0 && travel <= 180) || travel !== Math.round(travel)) {
       message.textContent = "זמן הנסיעה צריך להיות בין 0 ל־180 דקות.";
       return;
-    }
-    if (serverCatalog) {
-      serverCatalog.forEach(function (row) {
-        if (row.id === "beard" && row.minutes >= 10 && row.minutes <= 180) {
-          beardMinutes = Number(row.minutes);
-        }
-        if (current.services[row.id] && row.minutes >= 10 && row.minutes <= 180 && row.id === "beard") {
-          current.services[row.id].minutes = Number(row.minutes);
-        }
-      });
-    }
-    if (current.services["mens-haircut"]) {
-      current.services["mens-haircut"].minutes = mensCut;
-    }
-    if (current.services["kids-haircut"]) {
-      current.services["kids-haircut"].minutes = kidsCut;
-    }
-    if (current.services.beard) {
-      current.services.beard.minutes = beardMinutes;
     }
     each(event.target.querySelectorAll("[data-service]"), function (input) {
       var id = input.getAttribute("data-service");
@@ -1499,27 +1512,35 @@
     if (serverMode) {
       var auth = window.VIP_SUPABASE;
       var jobs = [];
-      if (!auth || !auth.saveService || !auth.saveTravel) {
+      if (!auth || !auth.saveService || !auth.saveBusinessSettings) {
         message.textContent = "לא ניתן לשמור את המחירים בשרת.";
         return;
       }
-      jobs.push(auth.saveTravel(travel));
+      jobs.push(auth.saveBusinessSettings(serviceMinutes, travel));
       Object.keys(current.services).forEach(function (id) {
         var item = current.services[id];
         if (item.priceIls === null || item.priceIls === undefined) {
           return;
         }
-        jobs.push(auth.saveService(id, item.priceIls, item.minutes));
+        jobs.push(auth.saveService(id, item.priceIls));
       });
       Promise.all(jobs).then(function (results) {
         var failed = null;
+        var savedSettings = null;
         (results || []).forEach(function (result) {
+          if (result && typeof result.serviceMinutes === "number") {
+            savedSettings = result;
+          }
           if (!failed && (!result || result.error)) {
             failed = result && result.error ? result.error : "לא ניתן לשמור את המחירים בשרת.";
           }
         });
         if (failed) {
           message.textContent = failed;
+          return;
+        }
+        if (!savedSettings) {
+          message.textContent = "לא ניתן לקרוא את ההגדרות שנשמרו בשרת.";
           return;
         }
         serverCatalog = Object.keys(current.services).map(function (id) {
@@ -1531,8 +1552,13 @@
           };
         });
         if (window.VIP_SCHEDULE) {
-          window.VIP_SCHEDULE.travelMinutes = travel;
+          window.VIP_SCHEDULE.serviceMinutes = savedSettings.serviceMinutes;
+          window.VIP_SCHEDULE.travelMinutes = savedSettings.travelMinutes;
         }
+        document.getElementById("biz-service").value = String(savedSettings.serviceMinutes);
+        document.getElementById("biz-travel").value = String(savedSettings.travelMinutes);
+        document.getElementById("biz-service").removeAttribute("data-touched");
+        document.getElementById("biz-travel").removeAttribute("data-touched");
         if (window.VIP_DEMO && window.VIP_DEMO.applyServer) {
           window.VIP_DEMO.applyServer(serverCatalog);
         }
@@ -1548,8 +1574,7 @@
           message.textContent = "הזמנים והמחירים נשמרו בשרת. העותק במכשיר לא נשמר.";
           return;
         }
-        document.getElementById("biz-travel").removeAttribute("data-touched");
-        message.textContent = "זמני התספורת, זמן הנסיעה והמחירים נשמרו.";
+        message.textContent = "משך השירות, זמן הנסיעה והמחירים נשמרו בשרת.";
       }).catch(function () {
         message.textContent = "לא ניתן לשמור את המחירים בשרת.";
       });
@@ -1566,6 +1591,10 @@
     } catch (error) {
       message.textContent = "לא ניתן לשמור במכשיר זה.";
       return;
+    }
+    if (window.VIP_SCHEDULE) {
+      window.VIP_SCHEDULE.serviceMinutes = serviceMinutes;
+      window.VIP_SCHEDULE.travelMinutes = travel;
     }
     message.textContent = "ההגדרות נשמרו במכשיר זה בלבד.";
   });

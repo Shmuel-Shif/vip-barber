@@ -70,22 +70,39 @@
     ordersWatch.timer = window.setInterval(pokeOrdersWatch, 60000);
   }
 
-  function sessionToken(ready) {
+  function usableToken(session) {
+    var expiresAt = session && session.expires_at ? Number(session.expires_at) * 1000 : 0;
+    if (!session || !session.access_token || !expiresAt || expiresAt <= Date.now() + 20000) {
+      return "";
+    }
+    return session.access_token;
+  }
+
+  function freshToken(ready) {
     return ready.auth.getSession().then(function (result) {
-      var session = result && result.data && result.data.session;
-      if ((result && result.error) || !session || !session.access_token) {
+      var session = result && result.data ? result.data.session : null;
+      var token = usableToken(session);
+      if (token) {
+        return token;
+      }
+      if (!session || !session.refresh_token || !ready.auth.refreshSession) {
         return "";
       }
-      return session.access_token;
+      return ready.auth.refreshSession().then(function (refreshed) {
+        var next = refreshed && refreshed.data ? refreshed.data.session : null;
+        return usableToken(next);
+      }).catch(function () {
+        return "";
+      });
     });
   }
 
-  function applyRealtimeAuth(ready, token) {
-    if (!token || !ready.realtime || typeof ready.realtime.setAuth !== "function") {
+  function applyRealtimeAuth(ready) {
+    if (!ready.realtime || typeof ready.realtime.setAuth !== "function") {
       return Promise.resolve();
     }
     try {
-      var result = ready.realtime.setAuth(token);
+      var result = ready.realtime.setAuth();
       if (result && typeof result.then === "function") {
         return result.then(function () {
           return null;
@@ -212,8 +229,14 @@
     if (text.indexOf("profile missing") !== -1) {
       return "החשבון עדיין לא מוכן. נסו להתחבר שוב.";
     }
+    if (text.indexOf("booking window is still open") !== -1) {
+      return "חלון ההזמנה עדיין פתוח.";
+    }
+    if (text.indexOf("service durations are not configured") !== -1) {
+      return "משך השירות לא הוגדר בשרת.";
+    }
     if (text.indexOf("hold expired") !== -1) {
-      return "השמירה על השעה פגה. בחרו שעה מחדש.";
+      return "חלון ההזמנה של 10 הדקות הסתיים.";
     }
     if (text.indexOf("hold does not match") !== -1) {
       return "השמירה לא תואמת את השעה שנבחרה. בחרו שעה מחדש.";
@@ -260,7 +283,26 @@
     if (text.indexOf("more than 7") !== -1 || text.indexOf("7 hours") !== -1) {
       return "אי אפשר לבטל החל מ־7 שעות לפני התור.";
     }
+    if (text.indexOf("argument of") !== -1 || text.indexOf("timestamp") !== -1 || text.indexOf("syntax error") !== -1) {
+      return "לא ניתן לטעון את זמני ההזמנה. נסו שוב בעוד רגע.";
+    }
     return raw;
+  }
+
+  function windowResult(result) {
+    var row = result && result.data && result.data[0] ? result.data[0] : null;
+    if (result && result.error) {
+      return { expiresAt: "", serverNow: "", expired: false, error: messageFor(result.error) };
+    }
+    if (!row || !row.expires_at) {
+      return { expiresAt: "", serverNow: "", expired: true, error: "" };
+    }
+    return {
+      expiresAt: row.expires_at,
+      serverNow: row.server_now || "",
+      expired: row.is_expired === true,
+      error: ""
+    };
   }
 
   function normalizeUsername(value) {
@@ -327,6 +369,20 @@
         }
         return { profile: profileResult.data, session: result.session, error: "" };
       });
+    });
+  }
+
+  var adminOnCustomerPage = "החשבון המחובר הוא חשבון מנהל. מכאן אי אפשר לבצע פעולת לקוח.";
+
+  function blockAdminCustomer(empty) {
+    if (document.body && document.body.classList.contains("admin")) {
+      return Promise.resolve(null);
+    }
+    return currentProfile().then(function (loaded) {
+      if (loaded && loaded.profile && loaded.profile.role === "admin") {
+        return empty;
+      }
+      return null;
     });
   }
 
@@ -459,7 +515,11 @@
       });
     },
     requestAppointment: function (fields) {
-      return withClient(function (ready) {
+      return blockAdminCustomer({ id: "", error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
         var clock = String(fields.time || "");
         if (clock.length === 5) {
           clock = clock + ":00";
@@ -489,9 +549,14 @@
           return { id: result.data || "", error: "" };
         });
       });
+      });
     },
     holdSlot: function (fields) {
-      return withClient(function (ready) {
+      return blockAdminCustomer({ holdId: "", expiresAt: "", serverNow: "", error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
         var clock = String(fields.time || "");
         if (clock.length === 5) {
           clock = clock + ":00";
@@ -505,14 +570,19 @@
         }).then(function (result) {
           var row = result.data && result.data[0] ? result.data[0] : null;
           if (result.error || !row || !row.hold_id || !row.expires_at) {
-            return { holdId: "", expiresAt: "", error: result.error ? messageFor(result.error) : "השעה לא נשמרה." };
+            return { holdId: "", expiresAt: "", serverNow: "", error: result.error ? messageFor(result.error) : "השעה לא נשמרה." };
           }
-          return { holdId: row.hold_id, expiresAt: row.expires_at, error: "" };
+          return { holdId: row.hold_id, expiresAt: row.expires_at, serverNow: row.server_now || "", error: "" };
         });
+      });
       });
     },
     currentHold: function () {
-      return withClient(function (ready) {
+      return blockAdminCustomer({ hold: null, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
         return ready.rpc("current_hold").then(function (result) {
           var row = result.data && result.data[0] ? result.data[0] : null;
           if (result.error) {
@@ -529,15 +599,21 @@
               adults: row.adults,
               children: row.children,
               beards: row.beards,
-              expiresAt: row.expires_at
+              expiresAt: row.expires_at,
+              serverNow: row.server_now || ""
             },
             error: ""
           };
         });
       });
+      });
     },
     releaseHold: function () {
-      return withClient(function (ready) {
+      return blockAdminCustomer({ error: "" }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
         return ready.rpc("release_my_hold").then(function (result) {
           if (!result.error) {
             return { error: "" };
@@ -549,9 +625,14 @@
           return { error: text };
         });
       });
+      });
     },
     fetchOrders: function () {
-      return withClient(function (ready) {
+      return blockAdminCustomer({ rows: [], error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
         return ready.from("orders").select("id, customer_id, status, adults, children, beards, appointment_date, appointment_time, full_name, phone, city, street, house_number, entrance, floor, apartment, entry_code, notes, payment").order("created_at", { ascending: false }).then(function (result) {
           if (result.error) {
             return { rows: [], error: messageFor(result.error) };
@@ -562,55 +643,94 @@
           };
         });
       });
+      });
     },
     orderAction: function (name, id) {
-      return withClient(function (ready) {
-        var wanted = name === "approve_order" ? "approved" : name === "reject_order" ? "rejected" : "";
-        function unverified() {
-          return { error: "לא ניתן לאמת את תוצאת הפעולה. בדקו את רשימת ההזמנות." };
+      return blockAdminCustomer({ error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
         }
-        function confirmAfterError(rpcError) {
-          return ready.from("orders").select("status").eq("id", id).maybeSingle().then(function (result) {
-            var status = result && result.data ? result.data.status : "";
-            if (!status) {
-              return unverified();
-            }
+        return withClient(function (ready) {
+        var wanted = name === "approve_order" ? "approved" : name === "reject_order" ? "rejected" : "";
+        function serverState(status) {
+          if (status === "approved") {
+            return "מאושר";
+          }
+          if (status === "rejected") {
+            return "נדחה";
+          }
+          if (status === "cancelled") {
+            return "בוטל";
+          }
+          if (status === "pending") {
+            return "ממתין";
+          }
+          return "";
+        }
+        function readStatus() {
+          function once() {
+            return ready.from("orders").select("status").eq("id", id).maybeSingle().then(function (result) {
+              if (result && result.data && result.data.status) {
+                return result.data.status;
+              }
+              if (result && result.error) {
+                return freshToken(ready).then(function (token) {
+                  if (!token) {
+                    return "";
+                  }
+                  return ready.from("orders").select("status").eq("id", id).maybeSingle().then(function (again) {
+                    return again && again.data && again.data.status ? again.data.status : "";
+                  }).catch(function () {
+                    return "";
+                  });
+                });
+              }
+              return "";
+            }).catch(function () {
+              return "";
+            });
+          }
+          return once();
+        }
+        function finishFromServer(rpcError) {
+          if (!wanted) {
+            return { error: rpcError || "" };
+          }
+          return readStatus().then(function (status) {
             if (status === wanted) {
-              return { error: "" };
+              return { error: "", status: status };
             }
             if (status === "pending") {
-              return { error: rpcError };
+              return { error: rpcError || "הפעולה נכשלה.", status: status };
             }
-            return unverified();
-          }).catch(function () {
-            return unverified();
+            if (status) {
+              var label = serverState(status);
+              var lead = wanted === "approved" ? "השרת לא אישר את ההזמנה." : "השרת לא דחה את ההזמנה.";
+              return { error: label ? lead + " המצב בשרת: " + label + "." : lead, status: status };
+            }
+            return { error: rpcError || "לא ניתן לאמת את תוצאת הפעולה. בדקו את רשימת ההזמנות.", status: "" };
           });
         }
         function send() {
           return ready.rpc(name, { p_id: id }).then(function (result) {
             if (result.error) {
-              if (wanted) {
-                return confirmAfterError(messageFor(result.error));
-              }
-              return { error: messageFor(result.error) };
+              return finishFromServer(messageFor(result.error));
             }
-            return { error: "" };
+            return finishFromServer("");
           }).catch(function () {
-            if (wanted) {
-              return confirmAfterError("הפעולה נכשלה.");
-            }
-            return { error: "הפעולה נכשלה." };
+            return finishFromServer("הפעולה נכשלה.");
           });
         }
         if (!wanted) {
           return send();
         }
-        return sessionToken(ready).then(function (token) {
+        return freshToken(ready).then(function (token) {
           if (!token) {
-            return { error: "ההתחברות עדיין נטענת. נסו שוב בעוד רגע." };
+            return { error: "ההתחברות עדיין נטענת. נסו שוב בעוד רגע.", status: "" };
           }
           return send();
         });
+      });
       });
     },
     fetchCatalog: function () {
@@ -629,7 +749,7 @@
           ready.from("weekly_hours").select("weekday, status, start_time, end_time, breaks, blocked").order("weekday"),
           ready.from("week_overrides").select("week_start, weekday, status, start_time, end_time, breaks, blocked"),
           ready.from("date_exceptions").select("service_date, status, start_time, end_time, breaks, blocked"),
-          ready.from("business_settings").select("travel_minutes").eq("id", true).maybeSingle()
+          ready.from("business_settings").select("service_minutes, travel_minutes").eq("id", true).maybeSingle()
         ]).then(function (results) {
           var index;
           for (index = 0; index < results.length; index += 1) {
@@ -642,33 +762,60 @@
               weekly: results[0].data || [],
               weeks: results[1].data || [],
               exceptions: results[2].data || [],
-              travelMinutes: results[3].data ? results[3].data.travel_minutes : null
+              serviceMinutes: results[3].data && results[3].data.service_minutes !== null && results[3].data.service_minutes !== undefined ? Number(results[3].data.service_minutes) : null,
+              travelMinutes: results[3].data && results[3].data.travel_minutes !== null && results[3].data.travel_minutes !== undefined ? Number(results[3].data.travel_minutes) : null
             },
             error: ""
           };
         });
       });
     },
-    saveTravel: function (minutes) {
+    saveBusinessSettings: function (serviceMinutes, travelMinutes) {
       return withClient(function (ready) {
         return ready.from("business_settings").update({
-          travel_minutes: minutes
-        }).eq("id", true).select("travel_minutes").then(function (result) {
-          if (result.error) {
-            return { error: messageFor(result.error) };
+          service_minutes: serviceMinutes,
+          travel_minutes: travelMinutes
+        }).eq("id", true).select("service_minutes, travel_minutes").then(function (result) {
+          var row = result.data && result.data[0] ? result.data[0] : null;
+          if (result.error || !row) {
+            return { serviceMinutes: null, travelMinutes: null, error: result.error ? messageFor(result.error) : "הפעולה הזו שמורה לחשבון האדמין." };
           }
-          if (!result.data || !result.data.length) {
-            return { error: "הפעולה הזו שמורה לחשבון האדמין." };
-          }
-          return { error: "" };
+          return {
+            serviceMinutes: Number(row.service_minutes),
+            travelMinutes: Number(row.travel_minutes),
+            error: ""
+          };
         });
       });
     },
-    saveService: function (id, price, minutes) {
+    beginBookingWindow: function () {
+      return blockAdminCustomer({ expiresAt: "", serverNow: "", expired: true, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+        return ready.rpc("begin_booking_window").then(function (result) {
+          return windowResult(result);
+        });
+      });
+      });
+    },
+    currentBookingWindow: function () {
+      return blockAdminCustomer({ expiresAt: "", serverNow: "", expired: true, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+        return ready.rpc("current_booking_window").then(function (result) {
+          return windowResult(result);
+        });
+      });
+      });
+    },
+    saveService: function (id, price) {
       return withClient(function (ready) {
         return ready.from("services").update({
-          price_ils: price,
-          minutes: minutes
+          price_ils: price
         }).eq("id", id).select("id").then(function (result) {
           if (result.error) {
             return { error: messageFor(result.error) };
@@ -737,13 +884,17 @@
       });
     },
     watchOrders: function (handler) {
+      return blockAdminCustomer({ error: "" }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
       ordersWatch.handler = handler;
       ordersWatch.stopped = false;
       ordersWatch.again = false;
       return withClient(function (ready) {
-        function start(token) {
+        function start() {
           var generation;
-          if (ordersWatch.stopped || !token) {
+          if (ordersWatch.stopped) {
             return { error: "" };
           }
           ordersWatch.generation += 1;
@@ -754,7 +905,7 @@
             ordersWatch.channel = null;
             ready.removeChannel(previous);
           }
-          return applyRealtimeAuth(ready, token).then(function () {
+          return applyRealtimeAuth(ready).then(function () {
             if (generation !== ordersWatch.generation || ordersWatch.stopped) {
               return { error: "" };
             }
@@ -779,9 +930,9 @@
             return { error: "" };
           });
         }
-        return sessionToken(ready).then(function (token) {
+        return freshToken(ready).then(function (token) {
           if (token) {
-            return start(token);
+            return start();
           }
           return new Promise(function (resolve) {
             window.setTimeout(function () {
@@ -789,12 +940,17 @@
                 resolve({ error: "" });
                 return;
               }
-              sessionToken(ready).then(function (later) {
-                resolve(start(later));
+              freshToken(ready).then(function (later) {
+                if (!later) {
+                  resolve({ error: "" });
+                  return;
+                }
+                resolve(start());
               });
             }, 500);
           });
         });
+      });
       });
     },
     stopOrdersWatch: function () {
