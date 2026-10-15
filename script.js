@@ -210,6 +210,61 @@
       var item = draft || readBookingDraft();
       return wholeCount(item.adults) + wholeCount(item.children) >= 2;
     },
+    partySize: function (draft) {
+      var item = draft || readBookingDraft();
+      return wholeCount(item.adults) + wholeCount(item.children);
+    },
+    resetParty: function () {
+      var draft = readBookingDraft();
+      draft.adults = 0;
+      draft.children = 0;
+      draft.beards = 0;
+      draft.vip = 0;
+      draft.date = "";
+      draft.time = "";
+      writeBookingDraft(draft);
+      try {
+        sessionStorage.removeItem("vip-window-arm");
+        sessionStorage.removeItem("vip-hold-id");
+      } catch (error) {
+        return;
+      }
+    },
+    specialContactDigits: function () {
+      var owner = window.VIP_DEMO && window.VIP_DEMO.owner ? window.VIP_DEMO.owner : null;
+      return String(owner && owner.whatsappPhone ? owner.whatsappPhone : "972512177021").replace(/\D/g, "");
+    },
+    specialVisitMessage: function (draft) {
+      var item = draft || readBookingDraft();
+      var contact = item.submitted && (item.submitted.fullName || item.submitted.phone || item.submitted.payment) ? item.submitted : (item.customer || {});
+      var lines = ["היי זאבי, אשמח לתאם ביקור לקבוצה:"];
+      lines.push("מבוגרים: " + wholeCount(item.adults));
+      lines.push("ילדים: " + wholeCount(item.children));
+      if (wholeCount(item.beards)) {
+        lines.push("זקן: " + wholeCount(item.beards));
+      }
+      lines.push("תאריך:");
+      if (item.time) {
+        lines.push("שעה: " + item.time);
+      }
+      if (contact.fullName) {
+        lines.push("שם: " + contact.fullName);
+      }
+      if (contact.phone) {
+        lines.push("טלפון: " + contact.phone);
+      }
+      if (contact.city || contact.street) {
+        lines.push("כתובת: " + [contact.street, contact.houseNumber, contact.city].filter(Boolean).join(" "));
+      }
+      return lines.join("\n");
+    },
+    specialWhatsappHref: function (draft) {
+      var digits = this.specialContactDigits();
+      if (!digits) {
+        return "";
+      }
+      return "https://wa.me/" + digits + "?text=" + encodeURIComponent(this.specialVisitMessage(draft));
+    },
     photoKey: "vip-booking-entrance-photo",
     sentPhotoKey: "vip-booking-sent-photo",
     clear: function () {
@@ -255,6 +310,157 @@
       }
     }
   };
+})();
+
+(function () {
+  "use strict";
+
+  var booking = window.VIP_BOOKING;
+  if (!booking || !booking.resetParty) {
+    return;
+  }
+
+  var file = window.location.pathname.split("/").pop() || "index.html";
+  var rank = {
+    "index.html": 0,
+    "booking.html": 1,
+    "booking-next.html": 2,
+    "booking-details.html": 3,
+    "booking-summary.html": 4
+  };
+  var here = rank[file] || 0;
+  var flagKey = "vip-back-reset";
+
+  function pageName(url) {
+    var path = "";
+    try {
+      path = new URL(url, window.location.href).pathname;
+    } catch (error) {
+      return "";
+    }
+    var name = path.split("/").pop();
+    return name || "index.html";
+  }
+
+  function navigationKind() {
+    var nav = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+    return nav && nav.type ? nav.type : "";
+  }
+
+  function clearClock() {
+    if (window.VIP_HOLD_UI && window.VIP_HOLD_UI.stop) {
+      window.VIP_HOLD_UI.stop();
+    }
+    var client = window.VIP_SUPABASE;
+    if (client && client.endBookingWindow) {
+      client.endBookingWindow();
+    }
+    if (client && client.releaseHold) {
+      client.releaseHold();
+    }
+  }
+
+  function resetBack() {
+    booking.resetParty();
+    clearClock();
+    if (typeof window.VIP_PARTY_SYNC === "function") {
+      window.VIP_PARTY_SYNC();
+    }
+  }
+
+  function arrivedBackward(from) {
+    return (rank[from] || 0) > here;
+  }
+
+  if (navigationKind() === "reload") {
+    try {
+      sessionStorage.removeItem(flagKey);
+    } catch (error) {
+      here = here;
+    }
+  } else if (navigationKind() === "back_forward") {
+    try {
+      var from = sessionStorage.getItem(flagKey) || "";
+      sessionStorage.removeItem(flagKey);
+      if (arrivedBackward(from)) {
+        resetBack();
+      }
+    } catch (error) {
+      here = here;
+    }
+  } else {
+    try {
+      sessionStorage.removeItem(flagKey);
+    } catch (error) {
+      here = here;
+    }
+  }
+
+  if (file !== "booking.html" && file !== "booking-next.html") {
+    return;
+  }
+
+  document.addEventListener("click", function (event) {
+    var node = event.target;
+    var link = null;
+    var href = "";
+    var target = 0;
+    while (node && node !== document) {
+      if (node.tagName === "A") {
+        link = node;
+        break;
+      }
+      node = node.parentNode;
+    }
+    if (!link || link.getAttribute("aria-disabled") === "true") {
+      return;
+    }
+    href = link.getAttribute("href") || "";
+    if (!href || href.indexOf("mailto:") === 0 || href.indexOf("tel:") === 0 || href.indexOf("http") === 0) {
+      return;
+    }
+    target = rank[pageName(href)];
+    if (target === undefined) {
+      return;
+    }
+    if (target < here) {
+      resetBack();
+      return;
+    }
+    if (target > here) {
+      window.VIP_LEAVE_FORWARD = true;
+    }
+  });
+
+  window.addEventListener("pagehide", function () {
+    if (window.VIP_LEAVE_FORWARD) {
+      return;
+    }
+    try {
+      sessionStorage.setItem(flagKey, file);
+    } catch (error) {
+      return;
+    }
+  });
+
+  window.addEventListener("pageshow", function (event) {
+    var from = "";
+    if (!event.persisted) {
+      return;
+    }
+    try {
+      from = sessionStorage.getItem(flagKey) || "";
+      sessionStorage.removeItem(flagKey);
+    } catch (error) {
+      from = "";
+    }
+    if (arrivedBackward(from)) {
+      resetBack();
+    }
+    if (file === "booking-next.html" && booking.partySize(booking.read()) < 2) {
+      window.location.reload();
+    }
+  });
 })();
 
 (function () {
@@ -816,9 +1022,40 @@
   beardsMinus.addEventListener("click", function () { change("beards", -1); });
   beardsPlus.addEventListener("click", function () { change("beards", 1); });
 
+  var specialModal = document.getElementById("special-booking");
+  var specialWhatsapp = document.getElementById("special-whatsapp");
+  var specialPhone = document.getElementById("special-phone");
+  var specialClose = document.getElementById("special-close");
+
+  function openSpecialBooking() {
+    var current = booking.read();
+    var digits = booking.specialContactDigits();
+    var href = booking.specialWhatsappHref(current);
+    if (specialWhatsapp && href) {
+      specialWhatsapp.href = href;
+    }
+    if (specialPhone && digits) {
+      specialPhone.href = "tel:+" + digits;
+    }
+    if (specialModal && specialModal.showModal && !specialModal.open) {
+      specialModal.showModal();
+    }
+  }
+
+  if (specialClose && specialModal) {
+    specialClose.addEventListener("click", function () {
+      specialModal.close();
+    });
+  }
+
   continueLink.addEventListener("click", function (event) {
     if (continueLink.getAttribute("aria-disabled") === "true") {
       event.preventDefault();
+      return;
+    }
+    if (booking.partySize(booking.read()) > 5) {
+      event.preventDefault();
+      openSpecialBooking();
       return;
     }
     try {
@@ -839,6 +1076,10 @@
   };
   paint();
   loadCatalog();
+  window.VIP_PARTY_SYNC = function () {
+    draft = booking.read();
+    paint();
+  };
 })();
 
 (function () {
@@ -857,6 +1098,10 @@
   var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
   var schedule = window.VIP_SCHEDULE || { standing: {} };
   var draft = booking.read();
+  if (booking.partySize(draft) > 5) {
+    window.location.replace("booking.html");
+    return;
+  }
   var continueButton = document.getElementById("cal-continue");
 
   function jerusalemToday() {
@@ -1540,6 +1785,7 @@
       }
       booking.write(draft);
       if (people > 5) {
+        window.VIP_LEAVE_FORWARD = true;
         window.location.href = "booking-details.html";
         return;
       }
@@ -1575,6 +1821,7 @@
           render();
           return;
         }
+        window.VIP_LEAVE_FORWARD = true;
         window.location.href = "booking-details.html";
       }).catch(function () {
         sayCal("לא הצלחנו לשמור את השעה. נסו שוב בעוד רגע.");
@@ -1671,10 +1918,12 @@
   }
 
   var draft = booking.read();
-  var partyCount = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
-  if (partyCount <= 5) {
-    window.VIP_SLOT_HOLD = { pending: true, id: "", matches: false, blocked: false, expired: false, retry: false, unverified: false, message: "" };
+  var partyCount = booking.partySize(draft);
+  if (partyCount > 5) {
+    window.location.replace("booking.html");
+    return;
   }
+  window.VIP_SLOT_HOLD = { pending: true, id: "", matches: false, blocked: false, expired: false, retry: false, unverified: false, message: "" };
   var customer = draft.customer;
   if (window.location.search.indexOf("edit=1") !== -1 && draft.submitted && (draft.submitted.fullName || draft.submitted.phone)) {
     customer = draft.submitted;
@@ -1928,11 +2177,6 @@
       return;
     }
     function proceed() {
-      var approvalModal = document.getElementById("approval-modal");
-      if (approvalModal && approvalModal.showModal && !approvalModal.open) {
-        approvalModal.showModal();
-        return;
-      }
       leaveForSummary();
     }
     if (partyCount > 5) {
@@ -1998,13 +2242,6 @@
     window.location.href = "booking-summary.html";
   }
 
-  var approvalContinue = document.getElementById("approval-continue");
-  if (approvalContinue) {
-    approvalContinue.addEventListener("click", function () {
-      form.requestSubmit();
-    });
-  }
-
   window.VIP_HOLD_WATCH = paint;
   paint();
 })();
@@ -2019,6 +2256,10 @@
   }
 
   var draft = booking.read();
+  if (booking.partySize(draft) > 5) {
+    window.location.replace("booking.html");
+    return;
+  }
   var customer = draft.submitted && (draft.submitted.fullName || draft.submitted.phone || draft.submitted.payment) ? draft.submitted : draft.customer;
   var months = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
   var when = document.getElementById("summary-when");
@@ -2126,21 +2367,20 @@
   }
 
   var draft = booking.read();
+  var people = booking.partySize(draft);
+  if (people > 5) {
+    window.location.replace("booking.html");
+    return;
+  }
   var modal = document.getElementById("sent-modal");
   var closeModal = document.getElementById("sent-close");
   var sendStatus = document.getElementById("send-status");
-  var people = (Number(draft.adults) || 0) + (Number(draft.children) || 0);
   var largeParty = people > 5;
 
   function saySend(text) {
     if (sendStatus) {
       sendStatus.textContent = text;
     }
-  }
-
-  function contactDigits() {
-    var owner = window.VIP_DEMO && window.VIP_DEMO.owner ? window.VIP_DEMO.owner : null;
-    return String(owner && owner.whatsappPhone ? owner.whatsappPhone : "972512177021").replace(/\D/g, "");
   }
 
   function contactLabel(digits) {
@@ -2155,34 +2395,12 @@
     var whatsapp = document.getElementById("large-whatsapp");
     var phoneLink = document.getElementById("large-phone");
     var partyText = document.getElementById("large-party-text");
-    var contact = draft.submitted && (draft.submitted.fullName || draft.submitted.phone || draft.submitted.payment) ? draft.submitted : draft.customer;
-    var digits = contactDigits();
-    var lines = ["היי זאבי, אשמח לתאם ביקור לקבוצה:"];
-    lines.push("מבוגרים: " + (Number(draft.adults) || 0));
-    lines.push("ילדים: " + (Number(draft.children) || 0));
-    if (Number(draft.beards)) {
-      lines.push("זקן: " + Number(draft.beards));
-    }
-    if (draft.date) {
-      lines.push("תאריך: " + draft.date);
-    }
-    if (draft.time) {
-      lines.push("שעה: " + draft.time);
-    }
-    if (contact.fullName) {
-      lines.push("שם: " + contact.fullName);
-    }
-    if (contact.phone) {
-      lines.push("טלפון: " + contact.phone);
-    }
-    if (contact.city || contact.street) {
-      lines.push("כתובת: " + [contact.street, contact.houseNumber, contact.city].filter(Boolean).join(" "));
-    }
+    var digits = booking.specialContactDigits();
     if (partyText) {
       partyText.textContent = "לקבוצה של יותר מחמישה אנשים זאבי ישמח לתאם את הביקור אישית. אפשר לחזור ולבחור עד חמישה אנשים, או ליצור קשר עכשיו.";
     }
     if (whatsapp && digits) {
-      whatsapp.href = "https://wa.me/" + digits + "?text=" + encodeURIComponent(lines.join("\n"));
+      whatsapp.href = booking.specialWhatsappHref(draft);
     }
     if (phoneLink && digits) {
       phoneLink.href = "tel:+" + digits;
@@ -3702,7 +3920,6 @@
 
   function publish(state) {
     var nextButton = document.getElementById("details-continue");
-    var approvalButton = document.getElementById("approval-continue");
     var allow = !!(state.matches && !state.blocked && !state.pending && !state.expired);
     window.VIP_SLOT_HOLD = state;
     if (sendButton && !sendButton.hidden && !window.VIP_SENDING) {
@@ -3711,9 +3928,6 @@
     if (state.blocked || state.expired) {
       if (nextButton) {
         nextButton.disabled = true;
-      }
-      if (approvalButton) {
-        approvalButton.disabled = true;
       }
     }
     if (typeof window.VIP_HOLD_WATCH === "function") {

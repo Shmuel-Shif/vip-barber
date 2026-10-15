@@ -208,6 +208,7 @@
   var openDay = "";
   var openOrder = "";
   var cancelId = "";
+  var deleteId = "";
 
   function each(list, fn) {
     Array.prototype.forEach.call(list, fn);
@@ -960,6 +961,7 @@
     var expanded = openOrder === order.id;
     var status = statusNames[order.status] ? order.status : "pending";
     card.className = "admin-compact is-" + status;
+    card.appendChild(deleteMark(order));
     toggle.type = "button";
     toggle.className = "admin-compact__toggle";
     toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
@@ -1043,6 +1045,20 @@
     return null;
   }
 
+  function deleteMark(order) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "admin-compact__delete";
+    button.textContent = "×";
+    button.setAttribute("aria-label", "מחיקת תור");
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      askDelete(order);
+    });
+    return button;
+  }
+
   function paintDay() {
     var label = document.getElementById("day-label");
     var list = document.getElementById("day-list");
@@ -1122,6 +1138,7 @@
       var customer = order.customer || {};
       var card = document.createElement("article");
       card.className = "admin-compact is-pending";
+      card.appendChild(deleteMark(order));
       paragraph(card, whenText(order), "admin-when");
       paragraph(card, (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : ""));
       paragraph(card, serviceText(order));
@@ -1211,6 +1228,10 @@
     if (orders) {
       orders.textContent = text;
     }
+    var day = document.getElementById("day-feedback");
+    if (day) {
+      day.textContent = text;
+    }
   }
 
   function refreshLists() {
@@ -1218,6 +1239,31 @@
     paintOrders();
     paintPending();
     paintNotices();
+  }
+
+  function askDelete(order) {
+    var dialog = document.getElementById("admin-delete");
+    var details = document.getElementById("admin-delete-details");
+    var customer = order.customer || {};
+    if (actionBusy) {
+      setFeedback("הפעולה הקודמת עדיין מתבצעת.");
+      return;
+    }
+    deleteId = order.id;
+    if (details) {
+      details.textContent = (customer.fullName || "ללא שם") + " · " + whenText(order);
+    }
+    if (dialog && dialog.showModal && !dialog.open) {
+      dialog.showModal();
+    }
+  }
+
+  function closeDelete() {
+    var dialog = document.getElementById("admin-delete");
+    deleteId = "";
+    if (dialog && dialog.open && dialog.close) {
+      dialog.close();
+    }
   }
 
   function askCancel(order) {
@@ -1449,6 +1495,81 @@
   document.getElementById("admin-confirm-no").addEventListener("click", function () {
     cancelId = "";
     document.getElementById("admin-confirm").close();
+  });
+  document.getElementById("admin-delete-no").addEventListener("click", function () {
+    if (actionBusy) {
+      return;
+    }
+    closeDelete();
+  });
+  document.getElementById("admin-delete").addEventListener("cancel", function () {
+    deleteId = "";
+  });
+  document.getElementById("admin-delete-yes").addEventListener("click", function () {
+    var id = deleteId;
+    var yes = document.getElementById("admin-delete-yes");
+    var auth = window.VIP_SUPABASE;
+    if (!id || actionBusy) {
+      return;
+    }
+    if (!auth || !auth.deleteOrder) {
+      setFeedback("לא הצלחנו למחוק את התור. נסו שוב בעוד רגע.");
+      return;
+    }
+    actionBusy = true;
+    yes.disabled = true;
+    auth.deleteOrder(id).then(function (result) {
+      function unlock() {
+        actionBusy = false;
+        yes.disabled = false;
+      }
+      if (result && result.deleted) {
+        var reload = ordersApi.reloadAccount ? ordersApi.reloadAccount() : Promise.resolve(null);
+        reload.then(function (loaded) {
+          unlock();
+          closeDelete();
+          var still = ordersApi.read().some(function (order) {
+            return order.id === id;
+          });
+          if (loaded && loaded.stale) {
+            return;
+          }
+          if (still) {
+            setFeedback("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
+            return;
+          }
+          refreshLists();
+          setFeedback("התור נמחק.");
+        }).catch(function () {
+          unlock();
+          closeDelete();
+          setFeedback("לא הצלחנו לרענן את הרשימה. נסו שוב בעוד רגע.");
+        });
+        return;
+      }
+      if (result && result.gone) {
+        var again = ordersApi.reloadAccount ? ordersApi.reloadAccount() : Promise.resolve(null);
+        again.then(function () {
+          unlock();
+          closeDelete();
+          refreshLists();
+          setFeedback(result.error || "התור כבר לא קיים.");
+        }).catch(function () {
+          unlock();
+          closeDelete();
+          setFeedback(result.error || "התור כבר לא קיים.");
+        });
+        return;
+      }
+      unlock();
+      closeDelete();
+      setFeedback(result && result.error ? result.error : "לא הצלחנו למחוק את התור. נסו שוב בעוד רגע.");
+    }).catch(function () {
+      actionBusy = false;
+      yes.disabled = false;
+      closeDelete();
+      setFeedback("לא הצלחנו למחוק את התור. נסו שוב בעוד רגע.");
+    });
   });
   document.getElementById("biz-service").addEventListener("input", function () {
     this.setAttribute("data-touched", "true");

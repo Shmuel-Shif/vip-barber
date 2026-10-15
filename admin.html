@@ -121,6 +121,7 @@
 
     <section class="admin-panel" data-admin-section="day" hidden aria-labelledby="day-title">
       <h1 id="day-title">הלוז היומי שלי</h1>
+      <p id="day-feedback" class="admin-feedback" role="status"></p>
       <div class="cal__nav admin-day-nav">
         <button type="button" id="day-prev">יום קודם</button>
         <h2 id="day-label"></h2>
@@ -189,6 +190,13 @@
     <p id="admin-confirm-text"></p>
     <button type="button" class="btn btn--gold" id="admin-confirm-yes">ביטול התור</button>
     <button type="button" class="btn btn--ghost" id="admin-confirm-no">חזרה בלי ביטול</button>
+  </dialog>
+  <dialog class="admin-dialog" id="admin-delete" aria-labelledby="admin-delete-title">
+    <h2 id="admin-delete-title">מחיקת תור</h2>
+    <p id="admin-delete-details"></p>
+    <p>האם אתה בטוח שברצונך למחוק את התור לצמיתות? לא ניתן יהיה לשחזר אותו.</p>
+    <button type="button" class="btn btn--gold" id="admin-delete-yes">כן, למחוק לצמיתות</button>
+    <button type="button" class="btn btn--ghost" id="admin-delete-no">ביטול</button>
   </dialog>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
   <script src="js/supabase-client.js"></script>

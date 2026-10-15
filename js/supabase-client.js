@@ -961,6 +961,47 @@
       });
       });
     },
+    deleteOrder: function (id) {
+      return blockAdminCustomer({ deleted: false, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          function rowStillThere() {
+            return ready.from("orders").select("id").eq("id", id).maybeSingle().then(function (result) {
+              if (result && result.error) {
+                return { error: messageFor(result.error), present: null };
+              }
+              return { error: "", present: !!(result && result.data && result.data.id) };
+            }).catch(function () {
+              return { error: "לא הצלחנו לאמת את המחיקה. נסו שוב בעוד רגע.", present: null };
+            });
+          }
+          return freshToken(ready).then(function (token) {
+            if (!token) {
+              return { deleted: false, error: "ההתחברות עדיין נטענת. נסו שוב בעוד רגע." };
+            }
+            return ready.rpc("admin_delete_order", { p_id: id }).then(function (result) {
+              var rpcError = result && result.error ? messageFor(result.error) : "";
+              return rowStillThere().then(function (check) {
+                if (check.error || check.present === null) {
+                  return { deleted: false, error: check.error || rpcError || "לא הצלחנו לאמת את המחיקה. נסו שוב בעוד רגע." };
+                }
+                if (check.present) {
+                  return { deleted: false, error: rpcError || "לא הצלחנו למחוק את התור. נסו שוב בעוד רגע." };
+                }
+                if (rpcError) {
+                  return { deleted: false, gone: true, error: rpcError };
+                }
+                return { deleted: true, error: "" };
+              });
+            }).catch(function () {
+              return { deleted: false, error: "לא הצלחנו למחוק את התור. נסו שוב בעוד רגע." };
+            });
+          });
+        });
+      });
+    },
     fetchCatalog: function () {
       return withClient(function (ready) {
         return ready.from("services").select("id, name, price_ils, minutes, addon, active").then(function (result) {
@@ -1038,6 +1079,21 @@
           return windowResult(result);
         });
       });
+      });
+    },
+    endBookingWindow: function () {
+      return blockAdminCustomer({ error: "" }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return ready.rpc("end_booking_window").then(function (result) {
+            if (result.error) {
+              return { error: messageFor(result.error) };
+            }
+            return { error: "" };
+          });
+        });
       });
     },
     saveService: function (id, price) {

@@ -281,7 +281,8 @@ window.VIP_SCHEDULE = {
     if (service < 10 || service > 180 || travel < 0 || travel > 180) {
       return null;
     }
-    return { service: service, travel: travel };
+    var people = adults + children;
+    return { service: service * people, travel: travel };
   }
 
   function overlapsSpan(start, duration, from, to) {
@@ -377,7 +378,7 @@ window.VIP_SCHEDULE = {
       if (!visit || closeAt === null) {
         return [];
       }
-      // Offered starts are 70 minutes apart. A visit still blocks only its service length plus travel.
+      // Offered starts stay 70 minutes apart. The visit blocks service_minutes for each person, then one travel gap.
       slots = slotsStepped(day.start, day.end, 70);
       slots = slots.filter(function (slot) {
         var start = minutes(slot);

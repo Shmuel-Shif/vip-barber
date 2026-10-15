@@ -3028,11 +3028,35 @@ body.admin .admin-setcard__body {
 }
 
 body.admin .admin-compact {
+  position: relative;
   margin-top: 0.7rem;
   padding: 0.75rem 0.85rem;
   border: 1px solid rgba(196, 164, 106, 0.4);
   border-radius: 0.9rem;
   background: rgba(196, 164, 106, 0.05);
+}
+
+body.admin .admin-compact__delete {
+  position: absolute;
+  z-index: 2;
+  top: 0.4rem;
+  inset-inline-end: 0.4rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1px solid rgba(196, 164, 106, 0.72);
+  border-radius: 0.35rem;
+  background: var(--black);
+  color: var(--gold-light);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+body.admin .admin-compact__top,
+body.admin .admin-when {
+  padding-inline-end: 1.8rem;
 }
 
 body.admin .admin-compact.is-pending {
@@ -3355,6 +3379,16 @@ dialog[open],
   .details__pair,
   body.admin .admin-hour__times {
     grid-template-columns: 1fr;
+  }
+
+  body.admin .admin-compact__delete {
+    width: 1.85rem;
+    height: 1.85rem;
+  }
+
+  body.admin .admin-compact__top,
+  body.admin .admin-when {
+    padding-inline-end: 2rem;
   }
 
   .btn,
