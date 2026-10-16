@@ -3123,7 +3123,27 @@
   var confirmYes = document.getElementById("order-cancel-yes");
   var confirmNo = document.getElementById("order-cancel-no");
 
+  var cancelling = false;
+  var confirmLabel = confirmYes ? confirmYes.textContent : "";
+
+  function setCancelling(on) {
+    cancelling = on;
+    if (confirmYes) {
+      confirmYes.disabled = on;
+      confirmYes.textContent = on ? "מבטל…" : confirmLabel;
+    }
+    if (confirmNo) {
+      confirmNo.disabled = on;
+    }
+    if (dialog) {
+      dialog.setAttribute("aria-busy", on ? "true" : "false");
+    }
+  }
+
   function askCancel(order) {
+    if (cancelling) {
+      return;
+    }
     cancelId = order.id;
     if (dialogText) {
       dialogText.textContent = "לבטל את ההזמנה ב" + dateLabel(order.date) + (order.time ? ", בשעה " + order.time : "") + "?";
@@ -3165,9 +3185,26 @@
 
   if (confirmYes) {
     confirmYes.addEventListener("click", function () {
+      if (cancelling || !cancelId) {
+        return;
+      }
       var saved = orders.cancel(cancelId, { by: "customer" });
       if (saved && typeof saved.then === "function") {
-      var saved = orders.cancel(cancelId, { by: "customer" });
+        setCancelling(true);
+        saved.then(function (result) {
+          setCancelling(false);
+          finishCancel(result);
+        }, function () {
+          setCancelling(false);
+          finishCancel({ error: "לא הצלחנו לבטל את ההזמנה. בדקו את החיבור לאינטרנט ונסו שוב." });
+          if (orders.reloadAccount) {
+            orders.reloadAccount().then(function () {
+              if (list) {
+                paint(list, false);
+              }
+            }, function () {});
+          }
+        });
         return;
       }
       finishCancel(saved);
@@ -3175,8 +3212,20 @@
   }
   if (confirmNo && dialog) {
     confirmNo.addEventListener("click", function () {
+      if (cancelling) {
+        return;
+      }
       cancelId = "";
       dialog.close();
+    });
+  }
+  if (dialog) {
+    dialog.addEventListener("cancel", function (event) {
+      if (cancelling) {
+        event.preventDefault();
+        return;
+      }
+      cancelId = "";
     });
   }
 })();
