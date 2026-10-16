@@ -707,7 +707,20 @@
     });
   }
 
-  function pushRejected() {
+  // Logs only the error name/code and message, never the endpoint or keys.
+  function logPushFailure(step, error) {
+    if (window.console && typeof window.console.warn === "function") {
+      var name = error && (error.code || error.name) ? String(error.code || error.name) : "Error";
+      var message = error && error.message ? String(error.message) : String(error || "");
+      window.console.warn("VIP push: " + step + " failed", name, message);
+    }
+  }
+
+  function pushRejected(step, error) {
+    if (step) {
+      logPushFailure(step, error);
+      return { ok: false, error: "ההרשמה נוצרה בדפדפן אבל לא נשמרה בשרת. נסו שוב." };
+    }
     return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
   }
 
@@ -807,16 +820,19 @@
         headers: { apikey: publishableKey }
       }).then(function (response) {
         if (!response.ok) {
+          logPushFailure("vapid key", { name: "HTTP " + response.status, message: "vapid-public-key request failed" });
           return { publicKey: "", error: "אי אפשר להפעיל התראות כרגע." };
         }
         return response.json().then(function (body) {
           var key = body && typeof body.publicKey === "string" ? body.publicKey.trim() : "";
           if (!/^[A-Za-z0-9_-]{87}$/.test(key)) {
+            logPushFailure("vapid key", { name: "InvalidKey", message: "public key has an unexpected format" });
             return { publicKey: "", error: "אי אפשר להפעיל התראות כרגע." };
           }
           return { publicKey: key, error: "" };
         });
-      }).catch(function () {
+      }).catch(function (error) {
+        logPushFailure("vapid key", error);
         return { publicKey: "", error: "אי אפשר להפעיל התראות כרגע." };
       });
     },
@@ -852,7 +868,8 @@
           });
           window.setTimeout(done, 4000);
         });
-      }).catch(function () {
+      }).catch(function (error) {
+        logPushFailure("service worker", error);
         return null;
       });
     },
@@ -880,7 +897,7 @@
           };
           return ready.from("push_subscriptions").select("id, audience").eq("endpoint", row.endpoint).maybeSingle().then(function (existing) {
             if (existing.error) {
-              return pushRejected();
+              return pushRejected("save lookup", existing.error);
             }
             if (existing.data && existing.data.audience === audience) {
               return ready.from("push_subscriptions").update({
@@ -888,7 +905,7 @@
                 auth_secret: row.auth_secret
               }).eq("id", existing.data.id).then(function (updated) {
                 if (updated.error) {
-                  return pushRejected();
+                  return pushRejected("save update", updated.error);
                 }
                 markPushReady(audience);
                 return { ok: true, error: "" };
@@ -899,11 +916,11 @@
               : Promise.resolve({ error: null });
             return clear.then(function (removed) {
               if (removed && removed.error) {
-                return pushRejected();
+                return pushRejected("save replace", removed.error);
               }
               return ready.from("push_subscriptions").insert(row).then(function (inserted) {
                 if (inserted.error) {
-                  return pushRejected();
+                  return pushRejected("save insert", inserted.error);
                 }
                 markPushReady(audience);
                 return { ok: true, error: "" };

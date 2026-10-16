@@ -3614,7 +3614,9 @@
     return;
   }
 
-  var storageKey = "vip-notify-choice";
+  // Admin and customer share one origin, so "later" is kept per app and only
+  // for the current visit. A browser block is read from Notification.permission.
+  var storageKey = "vip-notify-later-" + (document.body.classList.contains("admin") ? "admin" : "customer");
   var yes = document.getElementById("notify-yes");
   var later = document.getElementById("notify-later");
   var text = document.getElementById("notify-text");
@@ -3622,7 +3624,7 @@
 
   function remembered() {
     try {
-      return localStorage.getItem(storageKey) || "";
+      return sessionStorage.getItem(storageKey) || "";
     } catch (error) {
       return "";
     }
@@ -3630,7 +3632,7 @@
 
   function remember(value) {
     try {
-      localStorage.setItem(storageKey, value);
+      sessionStorage.setItem(storageKey, value);
     } catch (error) {
       return;
     }
@@ -3673,7 +3675,7 @@
     var choice = remembered();
     var state = permission();
     var auth = window.VIP_SUPABASE;
-    if (choice === "later" || choice === "denied" || state === "denied" || state === "unsupported") {
+    if (choice === "later" || state === "denied" || state === "unsupported") {
       return false;
     }
     if (state === "granted" && auth && auth.pushReady && auth.pushReady(pushAudience())) {
@@ -3695,9 +3697,33 @@
     return bytes;
   }
 
-  function subscribeAudience() {
+  var deniedText = "הדפדפן חסם את ההתראות. אפשר לשנות זאת בהגדרות הדפדפן.";
+  var prepared = null;
+
+  function logPushError(step, error) {
+    if (window.console && typeof window.console.warn === "function") {
+      window.console.warn("VIP push: " + step + " failed", error && error.name ? error.name : "Error", error && error.message ? error.message : String(error || ""));
+    }
+  }
+
+  function subscribeMessage(error) {
+    var name = error && error.name ? error.name : "";
+    if (name === "NotAllowedError") {
+      return "הדפדפן לא אישר הרשמה להתראות. ודאו שההתראות מותרות לאפליקציה ונסו שוב.";
+    }
+    if (name === "AbortError") {
+      return "שירות ההתראות של הדפדפן לא זמין כרגע. נסו שוב בעוד רגע.";
+    }
+    if (name === "InvalidStateError") {
+      return "רכיב ההתראות עדיין נטען. נסו שוב בעוד רגע.";
+    }
+    return "ההרשמה להתראות נכשלה" + (name ? " (" + name + ")" : "") + ". נסו שוב.";
+  }
+
+  // Everything async happens here, before the click, so the click can call
+  // pushManager.subscribe() first while the user gesture is still valid.
+  function loadPushSetup(audience) {
     var auth = window.VIP_SUPABASE;
-    var audience = pushAudience();
     if (!auth || !auth.profile || !auth.vapidPublicKey || !auth.preparePushRegistration || !auth.savePushSubscription) {
       return Promise.resolve({ ok: false, error: "אין חיבור כרגע. נסו שוב בעוד רגע." });
     }
@@ -3714,22 +3740,72 @@
       }
       return auth.vapidPublicKey().then(function (keyResult) {
         if (!keyResult || !keyResult.publicKey) {
-          return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
+          return { ok: false, error: "אי אפשר לקבל את מפתח ההתראות מהשרת. נסו שוב בעוד רגע." };
         }
         return auth.preparePushRegistration(audience).then(function (registration) {
           if (!registration || !registration.pushManager) {
-            return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
+            return { ok: false, error: "אי אפשר לרשום את רכיב ההתראות בדפדפן. נסו שוב בעוד רגע." };
           }
-          return registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: keyBytes(keyResult.publicKey)
-          }).then(function (subscription) {
-            return auth.savePushSubscription(audience, subscription);
-          });
+          return { ok: true, audience: audience, registration: registration, key: keyBytes(keyResult.publicKey) };
         });
       });
-    }).catch(function () {
-      return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
+    }).catch(function (error) {
+      logPushError("prepare", error);
+      return { ok: false, error: "אי אפשר להכין את ההתראות כרגע. נסו שוב בעוד רגע." };
+    });
+  }
+
+  function preparePush() {
+    var audience = pushAudience();
+    if (prepared && prepared.audience === audience) {
+      return prepared.promise;
+    }
+    var entry = { audience: audience, ready: null, promise: null };
+    prepared = entry;
+    entry.promise = loadPushSetup(audience).then(function (result) {
+      entry.ready = result;
+      if (!result.ok && prepared === entry) {
+        prepared = null;
+      }
+      return result;
+    });
+    return entry.promise;
+  }
+
+  function preparedNow() {
+    if (prepared && prepared.audience === pushAudience() && prepared.ready && prepared.ready.ok) {
+      return prepared.ready;
+    }
+    return null;
+  }
+
+  function subscribeWith(ready) {
+    var manager = ready.registration.pushManager;
+    var options = { userVisibleOnly: true, applicationServerKey: ready.key };
+    return manager.subscribe(options).catch(function (error) {
+      if (!error || error.name !== "InvalidStateError") {
+        throw error;
+      }
+      // A subscription made with an older VAPID key blocks a new one.
+      return manager.getSubscription().then(function (old) {
+        if (!old) {
+          throw error;
+        }
+        return old.unsubscribe().then(function () {
+          return manager.subscribe(options);
+        });
+      });
+    }).then(function (subscription) {
+      return window.VIP_SUPABASE.savePushSubscription(ready.audience, subscription).catch(function (error) {
+        logPushError("save", error);
+        return { ok: false, error: "ההרשמה נוצרה בדפדפן אבל לא נשמרה בשרת. נסו שוב." };
+      });
+    }, function (error) {
+      logPushError("subscribe", error);
+      if (permission() === "denied") {
+        return { ok: false, denied: true, error: deniedText };
+      }
+      return { ok: false, error: subscribeMessage(error) };
     });
   }
 
@@ -3752,14 +3828,29 @@
     box.hidden = false;
     if (yes && !yes.hidden) {
       yes.focus();
+      preparePush();
     } else if (later) {
       later.focus();
     }
   }
 
+  // The install prompt can open after this runs, so the two never stack:
+  // notifications step aside while it is open and return once it closes.
   function offerAfterInstall() {
-    if (install && !install.hidden) {
-      return;
+    if (install) {
+      new MutationObserver(function () {
+        if (!install.hidden) {
+          if (!box.hidden) {
+            box.hidden = true;
+            shown = false;
+          }
+          return;
+        }
+        show();
+      }).observe(install, { attributes: true, attributeFilter: ["hidden"] });
+      if (!install.hidden) {
+        return;
+      }
     }
     show();
   }
@@ -3787,35 +3878,50 @@
         }
         return;
       }
-      var ask = permission() === "granted" ? Promise.resolve("granted") : Notification.requestPermission();
-      ask.then(function (result) {
-        if (result !== "granted") {
-          if (result === "denied") {
-            remember("denied");
-            if (text) {
-              text.textContent = "הדפדפן חסם את ההתראות. אפשר לשנות זאת בהגדרות הדפדפן.";
-            }
-            yes.hidden = true;
-          }
-          return null;
-        }
-        remember("granted");
+      if (permission() === "denied") {
         if (text) {
-          text.textContent = "שומר את ההתראות…";
+          text.textContent = deniedText;
         }
-        return subscribeAudience();
-      }).then(function (saved) {
-        if (!saved) {
-          return;
-        }
-        if (saved.ok) {
+        yes.hidden = true;
+        return;
+      }
+      // subscribe() asks for permission itself, so it runs first inside the click.
+      var ready = preparedNow();
+      var subscribing = ready ? subscribeWith(ready) : preparePush().then(function (result) {
+        return result.ok ? subscribeWith(result) : result;
+      });
+      if (text) {
+        text.textContent = "שומר את ההתראות…";
+      }
+      subscribing.then(function (saved) {
+        if (saved && saved.ok) {
           hide();
           return;
         }
+        if (saved && saved.denied) {
+          yes.hidden = true;
+        }
         if (text) {
-          text.textContent = saved.error || "אי אפשר להפעיל התראות כרגע.";
+          text.textContent = saved && saved.error ? saved.error : "אי אפשר להפעיל התראות כרגע.";
+        }
+      }, function (error) {
+        logPushError("enable", error);
+        if (text) {
+          text.textContent = "אי אפשר להפעיל התראות כרגע.";
         }
       });
+    });
+  }
+
+  if (window.VIP_SUPABASE && typeof window.VIP_SUPABASE.watchAuth === "function") {
+    window.VIP_SUPABASE.watchAuth(function (event) {
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT") {
+        return;
+      }
+      prepared = null;
+      if (event === "SIGNED_IN" && !box.hidden && yes && !yes.hidden) {
+        preparePush();
+      }
     });
   }
 
