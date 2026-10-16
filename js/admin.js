@@ -142,7 +142,60 @@
         if (typeof refreshLists === "function") {
           refreshLists();
         }
+        openLinkedOrder(linkedOrderId(window.location.href));
       });
+    });
+  }
+
+  var orderIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function linkedOrderId(href) {
+    try {
+      var id = new URL(href, window.location.href).searchParams.get("order") || "";
+      return orderIdPattern.test(id) ? id.toLowerCase() : "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  // Opens the order a notification points to. Only the id comes from the link;
+  // the order itself is read from the admin's own loaded list.
+  function openLinkedOrder(id) {
+    if (!id || !serverMode || !window.VIP_ORDERS || !window.VIP_ORDERS.read) {
+      return;
+    }
+    try {
+      history.replaceState(null, "", window.location.pathname + window.location.hash);
+    } catch (error) {
+      id = id;
+    }
+    var order = window.VIP_ORDERS.read().filter(function (item) {
+      return item && String(item.id).toLowerCase() === id;
+    })[0];
+    if (!order) {
+      linkedOrder = "";
+      showPanel("pending");
+      setFeedback("ההזמנה מההתראה לא נמצאה ברשימה. ייתכן שהיא הוסתרה או שכבר אינה פעילה.");
+      return;
+    }
+    var panel = isHiddenOrder(order) ? "hidden" : (order.status === "pending" ? "pending" : "orders");
+    openOrder = order.id;
+    linkedOrder = order.id;
+    showPanel(panel);
+    var card = document.querySelector('[data-admin-section="' + panel + '"] [data-order-id="' + order.id + '"]');
+    if (card) {
+      card.setAttribute("tabindex", "-1");
+      card.scrollIntoView({ block: "center" });
+      card.focus({ preventScroll: true });
+    }
+  }
+
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener("message", function (event) {
+      var data = event.data || {};
+      if (data.type === "vip-open-order" && typeof data.url === "string") {
+        openLinkedOrder(linkedOrderId(data.url));
+      }
     });
   }
 
@@ -220,6 +273,7 @@
   var weekIsOverride = false;
   var openDay = "";
   var openOrder = "";
+  var linkedOrder = "";
   var cancelId = "";
   var deleteId = "";
   var hiddenIds = {};
@@ -974,7 +1028,8 @@
     var body = document.createElement("div");
     var expanded = openOrder === order.id;
     var status = statusNames[order.status] ? order.status : "pending";
-    card.className = "admin-compact is-" + status;
+    card.className = "admin-compact is-" + status + (order.id === linkedOrder ? " is-linked" : "");
+    card.setAttribute("data-order-id", order.id);
     if (mode !== "hidden") {
       card.appendChild(deleteMark(order));
     }
@@ -1157,7 +1212,8 @@
     items.forEach(function (order) {
       var customer = order.customer || {};
       var card = document.createElement("article");
-      card.className = "admin-compact is-pending";
+      card.className = "admin-compact is-pending" + (order.id === linkedOrder ? " is-linked" : "");
+      card.setAttribute("data-order-id", order.id);
       card.appendChild(deleteMark(order));
       paragraph(card, whenText(order), "admin-when");
       paragraph(card, (customer.fullName || "ללא שם") + (customer.phone ? " · " + customer.phone : ""));

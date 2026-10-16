@@ -647,12 +647,22 @@
     };
   }
 
+  // Customer pages live in the site folder; VIP Admin lives in its own admin/
+  // folder so each installed app has a scope that does not cover the other's start page.
+  function siteRoot() {
+    return new URL(isAdminPage() ? "../" : "./", window.location.href);
+  }
+
   function pushScope(audience) {
-    var base = new URL("./", window.location.href);
+    var root = siteRoot();
     if (audience === "admin") {
-      return new URL("admin.html", base).href;
+      return new URL("admin/", root).href;
     }
-    return base.href;
+    return root.href;
+  }
+
+  function legacyAdminScope() {
+    return new URL("admin.html", siteRoot()).href;
   }
 
   function pushReadyKey(audience) {
@@ -679,7 +689,41 @@
     if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistration !== "function") {
       return Promise.resolve(null);
     }
-    return navigator.serviceWorker.getRegistration(pushScope(audience)).catch(function () {
+    var scope = pushScope(audience);
+    // getRegistration() falls back to an outer scope, so only an exact match
+    // belongs to this audience.
+    return navigator.serviceWorker.getRegistration(scope).then(function (registration) {
+      return registration && registration.scope === scope ? registration : null;
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  // The first VIP Admin build used the file scope admin.html. Its push
+  // subscription is removed once the new admin/ subscription is saved, so the
+  // admin does not get every notification twice. The registration itself stays.
+  function retireLegacyAdminPush(ready) {
+    if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistration !== "function") {
+      return Promise.resolve();
+    }
+    var scope = legacyAdminScope();
+    return navigator.serviceWorker.getRegistration(scope).then(function (registration) {
+      if (!registration || registration.scope !== scope || !registration.pushManager) {
+        return null;
+      }
+      return registration.pushManager.getSubscription().then(function (subscription) {
+        if (!subscription) {
+          return null;
+        }
+        return ready.from("push_subscriptions").delete().eq("endpoint", subscription.endpoint).eq("audience", "admin").then(function (removed) {
+          if (removed && removed.error) {
+            logPushFailure("legacy admin cleanup", removed.error);
+          }
+          return subscription.unsubscribe();
+        });
+      });
+    }).catch(function (error) {
+      logPushFailure("legacy admin cleanup", error);
       return null;
     });
   }
@@ -846,7 +890,7 @@
       if (audience === "customer" && isAdminPage()) {
         return Promise.resolve(null);
       }
-      var script = new URL("sw.js", new URL("./", window.location.href)).href;
+      var script = new URL("sw.js", siteRoot()).href;
       return navigator.serviceWorker.register(script, { scope: pushScope(audience) }).then(function (registration) {
         var worker = registration.installing || registration.waiting;
         if (registration.active || !worker || worker.state === "activated") {
@@ -883,6 +927,13 @@
         return Promise.resolve(pushRejected());
       }
       return withClient(function (ready) {
+        function saved() {
+          markPushReady(audience);
+          var cleanup = audience === "admin" ? retireLegacyAdminPush(ready) : Promise.resolve();
+          return cleanup.then(function () {
+            return { ok: true, error: "" };
+          });
+        }
         return ready.auth.getSession().then(function (result) {
           var session = result && result.data ? result.data.session : null;
           if (!session || !session.user) {
@@ -907,8 +958,7 @@
                 if (updated.error) {
                   return pushRejected("save update", updated.error);
                 }
-                markPushReady(audience);
-                return { ok: true, error: "" };
+                return saved();
               });
             }
             var clear = existing.data
@@ -920,14 +970,32 @@
               }
               return ready.from("push_subscriptions").insert(row).then(function (inserted) {
                 if (inserted.error) {
-                  return pushRejected("save insert", inserted.error);
+                  var rejected = pushRejected("save insert", inserted.error);
+                  // The endpoint is still stored for another account on this device.
+                  rejected.conflict = inserted.error.code === "23505";
+                  return rejected;
                 }
-                markPushReady(audience);
-                return { ok: true, error: "" };
+                return saved();
               });
             });
           });
         });
+      });
+    },
+    pushSubscription: function (audience) {
+      if (audience !== "admin" && audience !== "customer") {
+        return Promise.resolve(null);
+      }
+      return currentPushRegistration(audience).then(function (registration) {
+        if (!registration || !registration.pushManager) {
+          return null;
+        }
+        return registration.pushManager.getSubscription().then(function (subscription) {
+          return subscription ? { registration: registration, subscription: subscription } : null;
+        });
+      }).catch(function (error) {
+        logPushFailure("subscription lookup", error);
+        return null;
       });
     },
     pushReady: function (audience) {

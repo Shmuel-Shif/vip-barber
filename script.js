@@ -3157,7 +3157,7 @@
   adminNote.setAttribute("aria-label", "חשבון מנהל");
   adminNoteText.textContent = "אתם מחוברים כמנהל. אזור הלקוחות לא מציג את החשבון הזה כלקוח, ולא מאפשר הזמנה או פעולות לקוח.";
   adminNoteLink.className = "btn btn--gold";
-  adminNoteLink.href = "admin.html";
+  adminNoteLink.href = "admin/";
   adminNoteLink.textContent = "לאזור הניהול";
   adminNoteOut.type = "button";
   adminNoteOut.className = "btn btn--ghost";
@@ -3672,16 +3672,8 @@
   }
 
   function shouldOffer() {
-    var choice = remembered();
     var state = permission();
-    var auth = window.VIP_SUPABASE;
-    if (choice === "later" || state === "denied" || state === "unsupported") {
-      return false;
-    }
-    if (state === "granted" && auth && auth.pushReady && auth.pushReady(pushAudience())) {
-      return false;
-    }
-    return true;
+    return remembered() !== "later" && state !== "denied" && state !== "unsupported";
   }
 
   function keyBytes(value) {
@@ -3796,7 +3788,19 @@
         });
       });
     }).then(function (subscription) {
-      return window.VIP_SUPABASE.savePushSubscription(ready.audience, subscription).catch(function (error) {
+      var auth = window.VIP_SUPABASE;
+      return auth.savePushSubscription(ready.audience, subscription).then(function (saved) {
+        if (!saved || !saved.conflict) {
+          return saved;
+        }
+        // The endpoint is still stored for another account that used this
+        // device, so a fresh endpoint is created for the signed-in account.
+        return subscription.unsubscribe().then(function () {
+          return manager.subscribe(options);
+        }).then(function (fresh) {
+          return auth.savePushSubscription(ready.audience, fresh);
+        });
+      }).catch(function (error) {
         logPushError("save", error);
         return { ok: false, error: "ההרשמה נוצרה בדפדפן אבל לא נשמרה בשרת. נסו שוב." };
       });
@@ -3836,8 +3840,11 @@
 
   // The install prompt can open after this runs, so the two never stack:
   // notifications step aside while it is open and return once it closes.
+  var installWatched = false;
+
   function offerAfterInstall() {
-    if (install) {
+    if (install && !installWatched) {
+      installWatched = true;
       new MutationObserver(function () {
         if (!install.hidden) {
           if (!box.hidden) {
@@ -3848,11 +3855,48 @@
         }
         show();
       }).observe(install, { attributes: true, attributeFilter: ["hidden"] });
-      if (!install.hidden) {
-        return;
-      }
+    }
+    if (install && !install.hidden) {
+      return;
     }
     show();
+  }
+
+  // Offers the prompt only to the account this app is for. When the browser
+  // already holds a subscription for this app, it is saved again silently so
+  // the server row exists without asking the user a second time.
+  function decide() {
+    var auth = window.VIP_SUPABASE;
+    var audience = pushAudience();
+    if (shown || !shouldOffer() || !auth || !auth.profile) {
+      return;
+    }
+    auth.profile().then(function (loaded) {
+      var role = loaded && loaded.profile ? loaded.profile.role : "";
+      if (!loaded || !loaded.session || shown) {
+        return null;
+      }
+      if (audience === "admin" ? role !== "admin" : role === "admin") {
+        return null;
+      }
+      if (permission() !== "granted" || !auth.pushSubscription) {
+        offerAfterInstall();
+        return null;
+      }
+      return auth.pushSubscription(audience).then(function (current) {
+        if (!current) {
+          offerAfterInstall();
+          return null;
+        }
+        return auth.savePushSubscription(audience, current.subscription).then(function (saved) {
+          if (!saved || !saved.ok) {
+            offerAfterInstall();
+          }
+        });
+      });
+    }).catch(function (error) {
+      logPushError("check", error);
+    });
   }
 
   if (later) {
@@ -3919,8 +3963,17 @@
         return;
       }
       prepared = null;
-      if (event === "SIGNED_IN" && !box.hidden && yes && !yes.hidden) {
+      if (event === "SIGNED_OUT") {
+        hide();
+        shown = false;
+        return;
+      }
+      if (!box.hidden && yes && !yes.hidden) {
         preparePush();
+        return;
+      }
+      if (!document.body.classList.contains("admin-locked")) {
+        decide();
       }
     });
   }
@@ -3933,13 +3986,13 @@
       var observer = new MutationObserver(function () {
         if (!document.body.classList.contains("admin-locked")) {
           observer.disconnect();
-          offerAfterInstall();
+          decide();
         }
       });
       observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
       return;
     }
-    offerAfterInstall();
+    decide();
   }
 
   offerWhenReady();

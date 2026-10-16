@@ -3064,6 +3064,11 @@ body.admin .admin-compact.is-pending {
   border-right: 4px solid var(--gold-light);
 }
 
+body.admin .admin-compact.is-linked {
+  outline: 2px solid var(--gold-light);
+  outline-offset: 3px;
+}
+
 body.admin .admin-compact.is-approved {
   border-right: 4px solid var(--gold);
 }
