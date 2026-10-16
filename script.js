@@ -31,16 +31,6 @@
   });
 
   Promise.race([Promise.all([fontsReady, imageReady]), timeout]).then(reveal);
-
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.getRegistrations().then(function (registrations) {
-        registrations.forEach(function (registration) {
-          registration.unregister();
-        });
-      });
-    });
-  }
 })();
 
 (function () {
@@ -2621,7 +2611,7 @@
 
   var steps = ["booking.html", "booking-next.html", "booking-details.html", "booking-summary.html"];
   var file = window.location.pathname.split("/").pop();
-  if (!file || file === "index.html") {
+  if (!file || file === "index.html" || file === "orders.html") {
     return;
   }
   var current = file === "booking-wait.html" ? steps.length - 1 : steps.indexOf(file);
@@ -2808,10 +2798,10 @@
     var intro = document.getElementById("orders-intro");
     target.textContent = "";
     if (title) {
-      title.hidden = items.length > 0;
+      title.hidden = false;
     }
     if (intro) {
-      intro.hidden = !signedIn || items.length > 0;
+      intro.hidden = !signedIn;
     }
     if (!items.length) {
       if (accountFailed || !accessReady) {
@@ -3661,8 +3651,16 @@
     return /iphone|ipad|ipod/i.test(window.navigator.userAgent) && !standalone();
   }
 
+  function pushAudience() {
+    return document.body.classList.contains("admin") ? "admin" : "customer";
+  }
+
+  function pushSupported() {
+    return ("Notification" in window) && ("serviceWorker" in navigator) && ("PushManager" in window);
+  }
+
   function blockedReason() {
-    if (!("Notification" in window)) {
+    if (!pushSupported()) {
       return "הדפדפן הזה לא תומך בהתראות, ולכן אי אפשר להפעיל אותן כאן.";
     }
     if (iosBrowser()) {
@@ -3674,13 +3672,65 @@
   function shouldOffer() {
     var choice = remembered();
     var state = permission();
-    if (choice === "later" || choice === "denied") {
+    var auth = window.VIP_SUPABASE;
+    if (choice === "later" || choice === "denied" || state === "denied" || state === "unsupported") {
       return false;
     }
-    if (state === "granted" || state === "denied") {
+    if (state === "granted" && auth && auth.pushReady && auth.pushReady(pushAudience())) {
       return false;
     }
     return true;
+  }
+
+  function keyBytes(value) {
+    var remainder = value.length % 4;
+    var padded = remainder === 0 ? value : value + "====".slice(remainder);
+    var standard = padded.replace(/-/g, "+").replace(/_/g, "/");
+    var binary = window.atob(standard);
+    var bytes = new Uint8Array(binary.length);
+    var index;
+    for (index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  function subscribeAudience() {
+    var auth = window.VIP_SUPABASE;
+    var audience = pushAudience();
+    if (!auth || !auth.profile || !auth.vapidPublicKey || !auth.preparePushRegistration || !auth.savePushSubscription) {
+      return Promise.resolve({ ok: false, error: "אין חיבור כרגע. נסו שוב בעוד רגע." });
+    }
+    return auth.profile().then(function (loaded) {
+      var role = loaded && loaded.profile ? loaded.profile.role : "";
+      if (!loaded || !loaded.session) {
+        return { ok: false, error: "כדי להפעיל התראות צריך להתחבר." };
+      }
+      if (audience === "admin" && role !== "admin") {
+        return { ok: false, error: "התראות הניהול זמינות רק למנהל." };
+      }
+      if (audience === "customer" && role === "admin") {
+        return { ok: false, error: "התראות ללקוח לא נרשמות מחשבון מנהל. הן מופעלות באפליקציית הניהול." };
+      }
+      return auth.vapidPublicKey().then(function (keyResult) {
+        if (!keyResult || !keyResult.publicKey) {
+          return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
+        }
+        return auth.preparePushRegistration(audience).then(function (registration) {
+          if (!registration || !registration.pushManager) {
+            return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
+          }
+          return registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: keyBytes(keyResult.publicKey)
+          }).then(function (subscription) {
+            return auth.savePushSubscription(audience, subscription);
+          });
+        });
+      });
+    }).catch(function () {
+      return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
+    });
   }
 
   function hide() {
@@ -3708,9 +3758,6 @@
   }
 
   function offerAfterInstall() {
-    if (!standalone()) {
-      return;
-    }
     if (install && !install.hidden) {
       return;
     }
@@ -3740,27 +3787,56 @@
         }
         return;
       }
-      Notification.requestPermission().then(function (result) {
-        if (result === "granted") {
-          remember("granted");
+      var ask = permission() === "granted" ? Promise.resolve("granted") : Notification.requestPermission();
+      ask.then(function (result) {
+        if (result !== "granted") {
+          if (result === "denied") {
+            remember("denied");
+            if (text) {
+              text.textContent = "הדפדפן חסם את ההתראות. אפשר לשנות זאת בהגדרות הדפדפן.";
+            }
+            yes.hidden = true;
+          }
+          return null;
+        }
+        remember("granted");
+        if (text) {
+          text.textContent = "שומר את ההתראות…";
+        }
+        return subscribeAudience();
+      }).then(function (saved) {
+        if (!saved) {
+          return;
+        }
+        if (saved.ok) {
           hide();
           return;
         }
-        if (result === "denied") {
-          remember("denied");
-          if (text) {
-            text.textContent = "הדפדפן חסם את ההתראות. אפשר לשנות זאת בהגדרות הדפדפן.";
-          }
-          yes.hidden = true;
+        if (text) {
+          text.textContent = saved.error || "אי אפשר להפעיל התראות כרגע.";
         }
       });
     });
   }
 
-  if (!standalone()) {
-    return;
+  function offerWhenReady() {
+    if (!standalone() && (iosBrowser() || !pushSupported())) {
+      return;
+    }
+    if (document.body.classList.contains("admin") && document.body.classList.contains("admin-locked")) {
+      var observer = new MutationObserver(function () {
+        if (!document.body.classList.contains("admin-locked")) {
+          observer.disconnect();
+          offerAfterInstall();
+        }
+      });
+      observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      return;
+    }
+    offerAfterInstall();
   }
-  offerAfterInstall();
+
+  offerWhenReady();
 })();
 
 (function () {

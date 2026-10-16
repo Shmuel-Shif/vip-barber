@@ -647,6 +647,70 @@
     };
   }
 
+  function pushScope(audience) {
+    var base = new URL("./", window.location.href);
+    if (audience === "admin") {
+      return new URL("admin.html", base).href;
+    }
+    return base.href;
+  }
+
+  function pushReadyKey(audience) {
+    return audience === "admin" ? "vip-push-ready-admin" : "vip-push-ready-customer";
+  }
+
+  function clearPushReady(audience) {
+    try {
+      localStorage.removeItem(pushReadyKey(audience));
+    } catch (error) {
+      return;
+    }
+  }
+
+  function markPushReady(audience) {
+    try {
+      localStorage.setItem(pushReadyKey(audience), "yes");
+    } catch (error) {
+      return;
+    }
+  }
+
+  function currentPushRegistration(audience) {
+    if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistration !== "function") {
+      return Promise.resolve(null);
+    }
+    return navigator.serviceWorker.getRegistration(pushScope(audience)).catch(function () {
+      return null;
+    });
+  }
+
+  function forgetPushSubscription(audience) {
+    clearPushReady(audience);
+    return currentPushRegistration(audience).then(function (registration) {
+      if (!registration || !registration.pushManager) {
+        return null;
+      }
+      return registration.pushManager.getSubscription().then(function (subscription) {
+        if (!subscription) {
+          return null;
+        }
+        var endpoint = subscription.endpoint;
+        var removeRow = client
+          ? client.from("push_subscriptions").delete().eq("endpoint", endpoint).eq("audience", audience)
+          : Promise.resolve({ error: null });
+        return Promise.resolve(removeRow).then(function () {
+          return subscription.unsubscribe();
+        });
+      });
+    }).catch(function () {
+      return null;
+    });
+  }
+
+  function pushRejected() {
+    return { ok: false, error: "אי אפשר להפעיל התראות כרגע." };
+  }
+
   var api = {
     connected: false,
     url: url,
@@ -728,11 +792,133 @@
     },
     signOut: function () {
       return withClient(function (ready) {
-        var signedOut = isAdminPage() ? ready.auth.signOut() : ready.auth.signOut({ scope: "local" });
-        return signedOut.then(function () {
-          return true;
+        var audience = isAdminPage() ? "admin" : "customer";
+        return forgetPushSubscription(audience).then(function () {
+          var signedOut = isAdminPage() ? ready.auth.signOut() : ready.auth.signOut({ scope: "local" });
+          return signedOut.then(function () {
+            return true;
+          });
         });
       });
+    },
+    vapidPublicKey: function () {
+      return fetch(url + "/functions/v1/vapid-public-key", {
+        method: "GET",
+        headers: { apikey: publishableKey }
+      }).then(function (response) {
+        if (!response.ok) {
+          return { publicKey: "", error: "אי אפשר להפעיל התראות כרגע." };
+        }
+        return response.json().then(function (body) {
+          var key = body && typeof body.publicKey === "string" ? body.publicKey.trim() : "";
+          if (!/^[A-Za-z0-9_-]{87}$/.test(key)) {
+            return { publicKey: "", error: "אי אפשר להפעיל התראות כרגע." };
+          }
+          return { publicKey: key, error: "" };
+        });
+      }).catch(function () {
+        return { publicKey: "", error: "אי אפשר להפעיל התראות כרגע." };
+      });
+    },
+    preparePushRegistration: function (audience) {
+      if ((audience !== "admin" && audience !== "customer") || !navigator.serviceWorker) {
+        return Promise.resolve(null);
+      }
+      if (audience === "admin" && !isAdminPage()) {
+        return Promise.resolve(null);
+      }
+      if (audience === "customer" && isAdminPage()) {
+        return Promise.resolve(null);
+      }
+      var script = new URL("sw.js", new URL("./", window.location.href)).href;
+      return navigator.serviceWorker.register(script, { scope: pushScope(audience) }).then(function (registration) {
+        var worker = registration.installing || registration.waiting;
+        if (registration.active || !worker || worker.state === "activated") {
+          return registration;
+        }
+        return new Promise(function (resolve) {
+          var finished = false;
+          function done() {
+            if (finished) {
+              return;
+            }
+            finished = true;
+            resolve(registration);
+          }
+          worker.addEventListener("statechange", function () {
+            if (worker.state === "activated" || worker.state === "redundant") {
+              done();
+            }
+          });
+          window.setTimeout(done, 4000);
+        });
+      }).catch(function () {
+        return null;
+      });
+    },
+    savePushSubscription: function (audience, subscription) {
+      var json = subscription && typeof subscription.toJSON === "function" ? subscription.toJSON() : null;
+      var keys = json && json.keys ? json.keys : null;
+      if ((audience !== "admin" && audience !== "customer") || !json || !json.endpoint || !keys || !keys.p256dh || !keys.auth) {
+        return Promise.resolve(pushRejected());
+      }
+      if ((audience === "admin" && !isAdminPage()) || (audience === "customer" && isAdminPage())) {
+        return Promise.resolve(pushRejected());
+      }
+      return withClient(function (ready) {
+        return ready.auth.getSession().then(function (result) {
+          var session = result && result.data ? result.data.session : null;
+          if (!session || !session.user) {
+            return { ok: false, error: "כדי להפעיל התראות צריך להתחבר." };
+          }
+          var row = {
+            user_id: session.user.id,
+            audience: audience,
+            endpoint: json.endpoint,
+            p256dh: keys.p256dh,
+            auth_secret: keys.auth
+          };
+          return ready.from("push_subscriptions").select("id, audience").eq("endpoint", row.endpoint).maybeSingle().then(function (existing) {
+            if (existing.error) {
+              return pushRejected();
+            }
+            if (existing.data && existing.data.audience === audience) {
+              return ready.from("push_subscriptions").update({
+                p256dh: row.p256dh,
+                auth_secret: row.auth_secret
+              }).eq("id", existing.data.id).then(function (updated) {
+                if (updated.error) {
+                  return pushRejected();
+                }
+                markPushReady(audience);
+                return { ok: true, error: "" };
+              });
+            }
+            var clear = existing.data
+              ? ready.from("push_subscriptions").delete().eq("id", existing.data.id)
+              : Promise.resolve({ error: null });
+            return clear.then(function (removed) {
+              if (removed && removed.error) {
+                return pushRejected();
+              }
+              return ready.from("push_subscriptions").insert(row).then(function (inserted) {
+                if (inserted.error) {
+                  return pushRejected();
+                }
+                markPushReady(audience);
+                return { ok: true, error: "" };
+              });
+            });
+          });
+        });
+      });
+    },
+    pushReady: function (audience) {
+      try {
+        return localStorage.getItem(pushReadyKey(audience)) === "yes";
+      } catch (error) {
+        return false;
+      }
     },
     watchAuth: function (handler) {
       return withClient(function (ready) {

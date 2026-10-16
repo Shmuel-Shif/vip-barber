@@ -1003,6 +1003,7 @@ body.nav-open {
 }
 
 .orders-page {
+  --step-bar-height: 0rem;
   align-content: start;
   text-align: right;
 }
