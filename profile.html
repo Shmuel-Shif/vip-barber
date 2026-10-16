@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="הפרופיל שלי ב־VIP.">
+  <title>הפרופיל שלי — זאבי הנאו - VIP</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="style.css?v=profile1">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">דלג לתוכן</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="VIP, דף הבית">
+      <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="פתיחת תפריט">
+      <span class="hamburger" aria-hidden="true"></span>
+    </button>
+    <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
+      <a href="index.html">בית</a>
+      <a href="booking.html">קבע תור</a>
+      <a href="orders.html">ההזמנות שלי</a>
+      <a href="profile.html" aria-current="page">פרופיל</a>
+    </nav>
+  </header>
+  <main id="content" class="page orders-page profile-page">
+    <h1>הפרופיל שלי</h1>
+    <p id="profile-status" class="orders-note" role="status">טוען את הפרטים…</p>
+
+    <section id="profile-signed-out" class="profile-card" hidden>
+      <p>כדי לראות ולערוך את הפרופיל צריך להתחבר.</p>
+      <button type="button" class="btn btn--gold" id="profile-login">התחברות</button>
+    </section>
+
+    <section id="profile-main" hidden>
+      <div class="profile-card profile-photo">
+        <div class="profile-photo__frame">
+          <img id="profile-photo-image" alt="תמונת הפרופיל שלי" hidden>
+          <span id="profile-photo-empty" class="profile-photo__empty" aria-hidden="true">VIP</span>
+        </div>
+        <div class="profile-photo__actions">
+          <button type="button" class="btn btn--ghost" id="profile-photo-pick">העלאת תמונה</button>
+          <button type="button" class="btn btn--ghost" id="profile-photo-clear" hidden>הסרת התמונה</button>
+        </div>
+        <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp" hidden>
+        <p id="profile-photo-status" class="profile-note" role="status"></p>
+      </div>
+
+      <form id="profile-form" class="profile-card" novalidate>
+        <h2>הפרטים שלי</h2>
+        <fieldset id="profile-fields" disabled>
+          <div class="details__pair">
+            <div class="field">
+              <label for="profile-first-name">שם פרטי</label>
+              <input id="profile-first-name" name="firstName" type="text" autocomplete="given-name" maxlength="40">
+            </div>
+            <div class="field">
+              <label for="profile-last-name">שם משפחה</label>
+              <input id="profile-last-name" name="lastName" type="text" autocomplete="family-name" maxlength="40">
+            </div>
+          </div>
+          <div class="field">
+            <label for="profile-phone">טלפון</label>
+            <input id="profile-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20">
+            <span class="field__error" id="profile-phone-error"></span>
+          </div>
+          <h3 class="profile-subtitle">כתובת להגעה</h3>
+          <div class="details__pair">
+            <div class="field">
+              <label for="profile-city">עיר</label>
+              <input id="profile-city" name="city" type="text" autocomplete="address-level2" maxlength="60">
+            </div>
+            <div class="field">
+              <label for="profile-street">רחוב</label>
+              <input id="profile-street" name="street" type="text" autocomplete="address-line1" maxlength="80">
+            </div>
+          </div>
+          <div class="details__pair">
+            <div class="field">
+              <label for="profile-house-number">מספר בית</label>
+              <input id="profile-house-number" name="houseNumber" type="text" maxlength="20">
+            </div>
+            <div class="field">
+              <label for="profile-entrance">כניסה</label>
+              <input id="profile-entrance" name="entrance" type="text" maxlength="20">
+            </div>
+          </div>
+          <div class="details__pair">
+            <div class="field">
+              <label for="profile-floor">קומה</label>
+              <input id="profile-floor" name="floor" type="text" maxlength="10">
+            </div>
+            <div class="field">
+              <label for="profile-apartment">דירה</label>
+              <input id="profile-apartment" name="apartment" type="text" maxlength="20">
+            </div>
+          </div>
+          <div class="field">
+            <label for="profile-entry-code">קוד כניסה</label>
+            <input id="profile-entry-code" name="entryCode" type="text" maxlength="20">
+          </div>
+        </fieldset>
+        <div class="profile-actions">
+          <button type="button" class="btn btn--gold" id="profile-edit">עריכת פרטים</button>
+          <button type="submit" class="btn btn--gold" id="profile-save" hidden>שמירת שינויים</button>
+          <button type="button" class="btn btn--ghost" id="profile-cancel" hidden>ביטול</button>
+        </div>
+        <p id="profile-form-status" class="profile-note" role="status"></p>
+      </form>
+
+      <section class="profile-card" aria-labelledby="profile-stats-title">
+        <h2 id="profile-stats-title">הסטטיסטיקה שלי</h2>
+        <dl class="profile-stats">
+          <div><dt>תספורות גברים</dt><dd id="stat-mens">0</dd></div>
+          <div><dt>תספורות ילדים</dt><dd id="stat-kids">0</dd></div>
+          <div><dt>סידורי זקן</dt><dd id="stat-beards">0</dd></div>
+        </dl>
+        <p id="profile-stats-note" class="profile-note" role="status"></p>
+      </section>
+    </section>
+  </main>
+  <div class="notify-prompt" id="notify-prompt" hidden>
+    <div class="notify-prompt__card" role="dialog" aria-modal="true" aria-labelledby="notify-title">
+      <h2 id="notify-title">אל תפספס את עדכון התור שלך</h2>
+      <p id="notify-text">הפעל התראות מ־VIP וקבל עדכון כשהתור שלך מאושר או כשיש שינוי בהזמנה.</p>
+      <div class="notify-prompt__actions">
+        <button type="button" class="btn btn--gold" id="notify-yes">הפעלת התראות</button>
+        <button type="button" class="btn btn--ghost" id="notify-later">אולי מאוחר יותר</button>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
+  <script src="js/supabase-client.js?v=profile1"></script>
+  <script src="script.js?v=profile1"></script>
+  <script src="js/profile.js?v=profile1"></script>
+</body>
+</html>

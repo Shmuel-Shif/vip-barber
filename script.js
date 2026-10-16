@@ -2040,6 +2040,98 @@
     var enabled = ok && holdOk;
     continueButton.disabled = !enabled;
     continueButton.setAttribute("aria-disabled", enabled ? "false" : "true");
+    updateProfileSync();
+  }
+
+  // Saved profile details fill only empty fields. The customer still reviews them here.
+  var account = window.VIP_SUPABASE;
+  var profileValues = null;
+  var profileKeys = ["fullName", "phone", "city", "street", "houseNumber", "entrance", "floor", "apartment", "entryCode"];
+  var profileSync = document.createElement("label");
+  var profileSyncBox = document.createElement("input");
+  profileSync.className = "profile-sync";
+  profileSync.hidden = true;
+  profileSyncBox.type = "checkbox";
+  profileSyncBox.id = "profile-sync";
+  profileSync.appendChild(profileSyncBox);
+  profileSync.appendChild(document.createTextNode("לשמור את השינויים גם בפרופיל שלי"));
+  continueButton.insertAdjacentElement("beforebegin", profileSync);
+
+  function profileContact(profile) {
+    var address = profile.address || {};
+    return {
+      fullName: profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(" "),
+      phone: profile.phone || "",
+      city: address.city || "",
+      street: address.street || "",
+      houseNumber: address.houseNumber || "",
+      entrance: address.entrance || "",
+      floor: address.floor || "",
+      apartment: address.apartment || "",
+      entryCode: address.entryCode || ""
+    };
+  }
+
+  function profileChanged() {
+    if (!profileValues) {
+      return false;
+    }
+    var value = readFields();
+    return profileKeys.some(function (key) {
+      return String(value[key] || "").trim() !== String(profileValues[key] || "").trim();
+    });
+  }
+
+  function updateProfileSync() {
+    if (!profileSync) {
+      return;
+    }
+    profileSync.hidden = !profileChanged();
+  }
+
+  function saveToProfile() {
+    if (!profileValues || profileSync.hidden || !profileSyncBox.checked || !account || !account.saveMyProfile) {
+      return Promise.resolve();
+    }
+    var value = readFields();
+    var name = String(value.fullName || "").trim().split(/\s+/);
+    var save = account.saveMyProfile({
+      firstName: name.shift() || "",
+      lastName: name.join(" "),
+      phone: value.phone,
+      address: {
+        city: value.city,
+        street: value.street,
+        houseNumber: value.houseNumber,
+        entrance: value.entrance,
+        floor: value.floor,
+        apartment: value.apartment,
+        entryCode: value.entryCode
+      }
+    }).catch(function () {
+      return null;
+    });
+    var limit = new Promise(function (resolve) {
+      window.setTimeout(resolve, 4000);
+    });
+    return Promise.race([save, limit]);
+  }
+
+  if (account && account.myProfile) {
+    account.myProfile().then(function (result) {
+      if (!result || !result.ready || !result.profile) {
+        return;
+      }
+      profileValues = profileContact(result.profile);
+      profileKeys.forEach(function (key) {
+        if (fields[key] && !fields[key].value.trim() && profileValues[key]) {
+          fields[key].value = profileValues[key];
+        }
+      });
+      paint();
+    }).catch(function () {
+      return null;
+    });
   }
 
   function showPhoto(url) {
@@ -2167,7 +2259,7 @@
       return;
     }
     function proceed() {
-      leaveForSummary();
+      saveToProfile().then(leaveForSummary, leaveForSummary);
     }
     if (partyCount > 5) {
       proceed();
@@ -2611,7 +2703,7 @@
 
   var steps = ["booking.html", "booking-next.html", "booking-details.html", "booking-summary.html"];
   var file = window.location.pathname.split("/").pop();
-  if (!file || file === "index.html" || file === "orders.html") {
+  if (!file || file === "index.html" || file === "orders.html" || file === "profile.html") {
     return;
   }
   var current = file === "booking-wait.html" ? steps.length - 1 : steps.indexOf(file);
@@ -3211,25 +3303,14 @@
     }
   }
 
-  function usernameOf(session, profile) {
-    if (profile && profile.username) {
-      return String(profile.username);
-    }
-    var user = session && session.user;
-    var meta = user && user.user_metadata ? user.user_metadata : {};
-    if (meta.username) {
-      return String(meta.username);
-    }
-    var email = user && user.email ? String(user.email) : "";
-    var mark = "@login.vip-barber.invalid";
-    var at = email.indexOf(mark);
-    return at > 0 ? email.slice(0, at) : "";
+  function headerName(profile) {
+    return profile ? String(profile.first_name || profile.full_name || "").trim() : "";
   }
 
   function paint(session, profile) {
     var admin = !!(session && session.user && profile && profile.role === "admin");
-    var name = usernameOf(session, profile);
     activeSession = session && session.user ? session : null;
+    var name = activeSession ? headerName(profile) : "";
     window.VIP_ADMIN_CUSTOMER = admin;
     document.body.classList.toggle("admin-as-customer", admin);
     adminNote.hidden = !admin;
@@ -3246,6 +3327,18 @@
     userLabel.textContent = name;
     authButton.textContent = activeSession ? "התנתקות" : "התחברות";
   }
+
+  window.addEventListener("vip-profile-saved", function () {
+    if (!activeSession || !auth.profile) {
+      return;
+    }
+    var generation = accountGeneration;
+    auth.profile().then(function (loaded) {
+      if (generation === accountGeneration && activeSession) {
+        paint(activeSession, loaded && loaded.profile);
+      }
+    });
+  });
 
   function refreshOrders(session) {
     if (!document.getElementById("orders-list") || !window.VIP_ORDERS || !window.VIP_ORDERS.showAccount) {

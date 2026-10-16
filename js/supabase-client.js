@@ -116,223 +116,50 @@
     return Promise.resolve();
   }
 
-  var customerTabId = "";
-  var heldLockId = "";
-  var handoffBound = false;
   var clientPromise = null;
+  // Customer pages share one saved session per device. VIP Admin keeps its own key.
+  var customerStorageKey = "sb-riyiypsuwlnpsycobnpw-customer-auth";
+  var adminStorageKey = "sb-riyiypsuwlnpsycobnpw-admin-auth";
 
   function isAdminPage() {
     return !!(document.body && document.body.classList.contains("admin"));
   }
 
-  function delay(ms) {
-    return new Promise(function (resolve) {
-      window.setTimeout(resolve, ms);
-    });
-  }
-
-  function newTabId() {
-    var bytes = new Uint8Array(16);
-    var index;
-    if (window.crypto && window.crypto.getRandomValues) {
-      window.crypto.getRandomValues(bytes);
-    } else {
-      for (index = 0; index < bytes.length; index += 1) {
-        bytes[index] = Math.floor(Math.random() * 256);
-      }
-    }
-    return Array.prototype.map.call(bytes, function (value) {
-      var hex = value.toString(16);
-      return hex.length < 2 ? "0" + hex : hex;
-    }).join("");
-  }
-
-  function customerStorageKey(tabId) {
-    return "sb-riyiypsuwlnpsycobnpw-tab-" + tabId;
-  }
-
-  function readSessionItem(key) {
+  // Earlier builds kept the customer session per tab in sessionStorage. Move this
+  // tab's session to device storage once, only when the device has none yet, then
+  // drop the tab copy so it is never read again.
+  function adoptTabSession() {
+    var tabId = "";
+    var tabKey = "";
+    var saved = "";
     try {
-      return window.sessionStorage.getItem(key) || "";
+      tabId = window.sessionStorage.getItem("vip-customer-tab") || "";
+      tabKey = tabId ? "sb-riyiypsuwlnpsycobnpw-tab-" + tabId : "";
+      saved = tabKey ? window.sessionStorage.getItem(tabKey) || "" : "";
+      if (saved && !window.localStorage.getItem(customerStorageKey)) {
+        window.localStorage.setItem(customerStorageKey, saved);
+      }
     } catch (error) {
-      return "";
+      saved = "";
     }
-  }
-
-  function writeSessionItem(key, value) {
     try {
-      window.sessionStorage.setItem(key, value);
-    } catch (error) {}
-  }
-
-  function removeSessionItem(key) {
-    try {
-      window.sessionStorage.removeItem(key);
-    } catch (error) {}
-  }
-
-  function bindTabHandoff() {
-    if (handoffBound) {
-      return;
-    }
-    handoffBound = true;
-    function markHandoff() {
-      if (customerTabId) {
-        writeSessionItem("vip-customer-tab-handoff", customerTabId);
+      if (tabKey) {
+        window.sessionStorage.removeItem(tabKey);
       }
+      window.sessionStorage.removeItem("vip-customer-tab");
+      window.sessionStorage.removeItem("vip-customer-tab-handoff");
+    } catch (error) {
+      tabKey = "";
     }
-    window.addEventListener("beforeunload", markHandoff);
-    window.addEventListener("pagehide", markHandoff);
-    window.addEventListener("pageshow", function (event) {
-      if (event.persisted) {
-        removeSessionItem("vip-customer-tab-handoff");
-      }
-    });
   }
 
-  function rememberCustomerTab(tabId) {
-    customerTabId = tabId;
-    writeSessionItem("vip-customer-tab", tabId);
-    bindTabHandoff();
-    return tabId;
-  }
-
-  function claimTabLock(tabId) {
-    var name = "vip-customer-auth-" + tabId;
-    if (heldLockId === tabId) {
-      return Promise.resolve(true);
-    }
-    if (!navigator.locks || typeof navigator.locks.request !== "function") {
-      return Promise.resolve(false);
-    }
-    return new Promise(function (resolve) {
-      var settled = false;
-      function finish(owned) {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        resolve(owned);
-      }
-      navigator.locks.request(name, { mode: "exclusive", ifAvailable: true }, function (lock) {
-        if (!lock) {
-          finish(false);
-          return undefined;
-        }
-        finish(true);
-        heldLockId = tabId;
-        return new Promise(function () {});
-      }).catch(function () {
-        finish(false);
-      });
-    });
-  }
-
-  function stealTabLock(tabId) {
-    var name = "vip-customer-auth-" + tabId;
-    if (heldLockId === tabId) {
-      return Promise.resolve(true);
-    }
-    if (!navigator.locks || typeof navigator.locks.request !== "function") {
-      return Promise.resolve(false);
-    }
-    return new Promise(function (resolve) {
-      var settled = false;
-      function finish(owned) {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        resolve(owned);
-      }
-      navigator.locks.request(name, { steal: true }, function () {
-        heldLockId = tabId;
-        finish(true);
-        return new Promise(function () {});
-      }).catch(function () {
-        finish(false);
-      });
-    });
-  }
-
-  function ownCustomerTab(tabId) {
-    if (!navigator.locks || typeof navigator.locks.request !== "function") {
-      return Promise.resolve(false);
-    }
-    function attempt(left) {
-      return claimTabLock(tabId).then(function (owned) {
-        if (owned || left <= 0) {
-          return owned;
-        }
-        return delay(80).then(function () {
-          return attempt(left - 1);
-        });
-      });
-    }
-    return attempt(4);
-  }
-
-  function keepCustomerTab(tabId) {
-    if (!navigator.locks || typeof navigator.locks.request !== "function") {
-      return;
-    }
-    claimTabLock(tabId).then(function (owned) {
-      if (owned || customerTabId !== tabId) {
-        return;
-      }
-      delay(100).then(function () {
-        keepCustomerTab(tabId);
-      });
-    });
-  }
-
-  function prepareCustomerTab() {
-    var existing = readSessionItem("vip-customer-tab");
-    var handoff = readSessionItem("vip-customer-tab-handoff");
-    removeSessionItem("vip-customer-tab-handoff");
-    if (!existing) {
-      rememberCustomerTab(newTabId());
-      return ownCustomerTab(customerTabId).then(function () {
-        return customerTabId;
-      });
-    }
-    if (handoff && handoff === existing) {
-      rememberCustomerTab(existing);
-      stealTabLock(existing).then(function (owned) {
-        if (!owned) {
-          keepCustomerTab(existing);
-        }
-      });
-      return Promise.resolve(existing);
-    }
-    return ownCustomerTab(existing).then(function (owned) {
-      if (owned) {
-        return rememberCustomerTab(existing);
-      }
-      removeSessionItem(customerStorageKey(existing));
-      rememberCustomerTab(newTabId());
-      return ownCustomerTab(customerTabId).then(function () {
-        return customerTabId;
-      });
-    });
-  }
-
-  function authOptionsFor(tabId) {
-    if (isAdminPage()) {
-      return {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: false,
-        storage: window.localStorage,
-        storageKey: "sb-riyiypsuwlnpsycobnpw-admin-auth"
-      };
-    }
+  function authOptions() {
     return {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false,
-      storage: window.sessionStorage,
-      storageKey: customerStorageKey(tabId)
+      storage: window.localStorage,
+      storageKey: isAdminPage() ? adminStorageKey : customerStorageKey
     };
   }
 
@@ -361,11 +188,11 @@
         if (!ready) {
           return null;
         }
-        var tabReady = isAdminPage() ? Promise.resolve("") : prepareCustomerTab();
-        return tabReady.then(function (tabId) {
-          return window.supabase.createClient(url, publishableKey, {
-            auth: authOptionsFor(tabId)
-          });
+        if (!isAdminPage()) {
+          adoptTabSession();
+        }
+        return window.supabase.createClient(url, publishableKey, {
+          auth: authOptions()
         });
       }).then(function (created) {
         client = created || null;
@@ -586,12 +413,30 @@
     });
   }
 
+  var profileDetailColumns = "first_name, last_name, address, photo_path";
+
+  function missingColumn(error) {
+    var code = String((error && error.code) || "");
+    return code === "42703" || code === "PGRST204" || /does not exist|could not find/i.test(String((error && error.message) || ""));
+  }
+
   function currentProfile() {
     return currentSession().then(function (result) {
       if (!result.session || !client) {
         return { profile: null, session: result.session, error: result.error };
       }
-      return client.from("profiles").select("role, full_name, phone, username").eq("id", result.session.user.id).maybeSingle().then(function (profileResult) {
+      var base = "role, full_name, phone, username";
+      function load(columns) {
+        return client.from("profiles").select(columns).eq("id", result.session.user.id).maybeSingle();
+      }
+      var first = isAdminPage() ? load(base) : load(base + ", " + profileDetailColumns);
+      return first.then(function (profileResult) {
+        // Until 0016 runs, the detail columns do not exist. Role checks must still work.
+        if (profileResult.error && !isAdminPage() && missingColumn(profileResult.error)) {
+          return load(base);
+        }
+        return profileResult;
+      }).then(function (profileResult) {
         if (profileResult.error) {
           return { profile: null, session: result.session, error: messageFor(profileResult.error) };
         }
@@ -614,6 +459,81 @@
     });
   }
 
+  var addressParts = {
+    city: "city",
+    street: "street",
+    houseNumber: "house_number",
+    entrance: "entrance",
+    floor: "floor",
+    apartment: "apartment",
+    entryCode: "entry_code"
+  };
+
+  function mapProfile(row) {
+    var source = row && row.address && typeof row.address === "object" ? row.address : {};
+    var address = {};
+    Object.keys(addressParts).forEach(function (key) {
+      address[key] = typeof source[addressParts[key]] === "string" ? source[addressParts[key]] : "";
+    });
+    return {
+      username: row && row.username ? String(row.username) : "",
+      fullName: row && row.full_name ? String(row.full_name) : "",
+      firstName: row && row.first_name ? String(row.first_name) : "",
+      lastName: row && row.last_name ? String(row.last_name) : "",
+      phone: row && row.phone ? String(row.phone) : "",
+      address: address,
+      photoPath: row && row.photo_path ? String(row.photo_path) : ""
+    };
+  }
+
+  // Only the keys present in fields are written, so a partial save keeps the rest.
+  function profileRow(fields) {
+    var row = {};
+    function text(value) {
+      var clean = String(value || "").trim();
+      return clean ? clean : null;
+    }
+    if ("firstName" in fields) {
+      row.first_name = text(fields.firstName);
+    }
+    if ("lastName" in fields) {
+      row.last_name = text(fields.lastName);
+    }
+    if ("phone" in fields) {
+      row.phone = text(fields.phone);
+    }
+    if (fields.address && typeof fields.address === "object") {
+      var address = {};
+      Object.keys(addressParts).forEach(function (key) {
+        var value = text(fields.address[key]);
+        if (value) {
+          address[addressParts[key]] = value;
+        }
+      });
+      row.address = Object.keys(address).length ? address : null;
+    }
+    return row;
+  }
+
+  function profileError(error) {
+    var text = String((error && error.message) || "");
+    if (missingColumn(error)) {
+      return "הפרופיל עדיין לא זמין. נסו שוב מאוחר יותר.";
+    }
+    if (/invalid profile|check constraint|violates/i.test(text)) {
+      return "חלק מהפרטים ארוכים מדי או לא תקינים.";
+    }
+    return messageFor(error);
+  }
+
+  function randomHex(size) {
+    var bytes = new Uint8Array(size);
+    window.crypto.getRandomValues(bytes);
+    return Array.prototype.map.call(bytes, function (value) {
+      return (value < 16 ? "0" : "") + value.toString(16);
+    }).join("");
+  }
+
   function mapOrder(row) {
     var time = row && row.appointment_time ? String(row.appointment_time) : "";
     if (time.length >= 5) {
@@ -630,6 +550,11 @@
       vip: 0,
       date: row.appointment_date || "",
       time: time,
+      prices: {
+        adults: typeof row.adult_price_ils === "number" ? row.adult_price_ils : null,
+        children: typeof row.child_price_ils === "number" ? row.child_price_ils : null,
+        beards: typeof row.beard_price_ils === "number" ? row.beard_price_ils : null
+      },
       photo: "",
       customer: {
         fullName: row.full_name || "",
@@ -1132,7 +1057,17 @@
           return blocked;
         }
         return withClient(function (ready) {
-        return ready.from("orders").select("id, customer_id, status, adults, children, beards, appointment_date, appointment_time, full_name, phone, city, street, house_number, entrance, floor, apartment, entry_code, notes, payment").order("created_at", { ascending: false }).then(function (result) {
+        var columns = "id, customer_id, status, adults, children, beards, appointment_date, appointment_time, full_name, phone, city, street, house_number, entrance, floor, apartment, entry_code, notes, payment";
+        function load(withPrices) {
+          return ready.from("orders").select(withPrices ? columns + ", adult_price_ils, child_price_ils, beard_price_ils" : columns).order("created_at", { ascending: false });
+        }
+        return load(isAdminPage()).then(function (result) {
+          // Until 0015 runs, the price columns do not exist (42703). The list still loads without them.
+          if (result.error && isAdminPage() && (String(result.error.code || "") === "42703" || /_price_ils.*does not exist/.test(String(result.error.message || "")))) {
+            return load(false);
+          }
+          return result;
+        }).then(function (result) {
           if (result.error) {
             return { rows: [], error: messageFor(result.error) };
           }
@@ -1315,6 +1250,209 @@
             });
           });
         });
+      });
+    },
+    myProfile: function () {
+      return blockAdminCustomer({ profile: null, signedIn: true, ready: false, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return currentProfile().then(function (loaded) {
+          if (!loaded || !loaded.session) {
+            return { profile: null, signedIn: false, ready: false, error: loaded && loaded.error ? loaded.error : "" };
+          }
+          var row = loaded.profile || {};
+          return {
+            profile: mapProfile(row),
+            signedIn: true,
+            ready: Object.prototype.hasOwnProperty.call(row, "first_name"),
+            error: loaded.error || ""
+          };
+        });
+      });
+    },
+    saveMyProfile: function (fields) {
+      return blockAdminCustomer({ profile: null, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return ready.auth.getSession().then(function (result) {
+            var session = result && result.data ? result.data.session : null;
+            if (!session || !session.user) {
+              return { profile: null, error: "כדי לשמור פרטים צריך להתחבר." };
+            }
+            var row = profileRow(fields || {});
+            return ready.from("profiles").update(row).eq("id", session.user.id)
+              .select("role, full_name, phone, username, " + profileDetailColumns).maybeSingle().then(function (saved) {
+                if (saved.error) {
+                  return { profile: null, error: profileError(saved.error) };
+                }
+                if (!saved.data) {
+                  return { profile: null, error: "לא הצלחנו לשמור את הפרטים. נסו שוב בעוד רגע." };
+                }
+                return { profile: mapProfile(saved.data), error: "" };
+              });
+          });
+        }).catch(function () {
+          return { profile: null, error: "לא הצלחנו לשמור את הפרטים. נסו שוב בעוד רגע." };
+        });
+      });
+    },
+    uploadAvatar: function (blob, extension) {
+      var ext = extension === "png" || extension === "webp" ? extension : "jpg";
+      var types = { jpg: "image/jpeg", png: "image/png", webp: "image/webp" };
+      return blockAdminCustomer({ path: "", error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return currentProfile().then(function (loaded) {
+            if (!loaded || !loaded.session || !ready.storage) {
+              return { path: "", error: "כדי להעלות תמונה צריך להתחבר." };
+            }
+            var previous = loaded.profile && loaded.profile.photo_path ? loaded.profile.photo_path : "";
+            var path = loaded.session.user.id + "/avatar-" + randomHex(16) + "." + ext;
+            var bucket = ready.storage.from("avatars");
+            return bucket.upload(path, blob, { contentType: types[ext], upsert: false }).then(function (sent) {
+              if (sent.error) {
+                return { path: "", error: "לא הצלחנו להעלות את התמונה. נסו תמונה אחרת או נסו שוב." };
+              }
+              return ready.from("profiles").update({ photo_path: path }).eq("id", loaded.session.user.id).select("photo_path").maybeSingle().then(function (saved) {
+                if (saved.error || !saved.data) {
+                  return bucket.remove([path]).then(function () {
+                    return { path: "", error: saved.error ? profileError(saved.error) : "לא הצלחנו לשמור את התמונה." };
+                  });
+                }
+                if (previous && previous !== path) {
+                  bucket.remove([previous]).catch(function () {
+                    return null;
+                  });
+                }
+                return { path: path, error: "" };
+              });
+            });
+          });
+        }).catch(function () {
+          return { path: "", error: "לא הצלחנו להעלות את התמונה. נסו שוב בעוד רגע." };
+        });
+      });
+    },
+    removeAvatar: function () {
+      return blockAdminCustomer({ error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return currentProfile().then(function (loaded) {
+            if (!loaded || !loaded.session || !ready.storage) {
+              return { error: "כדי להסיר תמונה צריך להתחבר." };
+            }
+            var previous = loaded.profile && loaded.profile.photo_path ? loaded.profile.photo_path : "";
+            return ready.from("profiles").update({ photo_path: null }).eq("id", loaded.session.user.id).select("photo_path").maybeSingle().then(function (saved) {
+              if (saved.error || !saved.data) {
+                return { error: saved.error ? profileError(saved.error) : "לא הצלחנו להסיר את התמונה." };
+              }
+              if (previous) {
+                return ready.storage.from("avatars").remove([previous]).then(function () {
+                  return { error: "" };
+                }).catch(function () {
+                  return { error: "" };
+                });
+              }
+              return { error: "" };
+            });
+          });
+        }).catch(function () {
+          return { error: "לא הצלחנו להסיר את התמונה. נסו שוב בעוד רגע." };
+        });
+      });
+    },
+    avatarUrl: function (path) {
+      if (!path) {
+        return Promise.resolve({ url: "", error: "" });
+      }
+      return withClient(function (ready) {
+        if (!ready.storage) {
+          return { url: "", error: "" };
+        }
+        return ready.storage.from("avatars").createSignedUrl(path, 3600).then(function (signed) {
+          if (signed.error || !signed.data) {
+            return { url: "", error: "לא הצלחנו להציג את התמונה." };
+          }
+          return { url: signed.data.signedUrl || signed.data.signedURL || "", error: "" };
+        });
+      }).catch(function () {
+        return { url: "", error: "לא הצלחנו להציג את התמונה." };
+      });
+    },
+    myVisitStats: function () {
+      return blockAdminCustomer({ stats: null, error: adminOnCustomerPage }).then(function (blocked) {
+        if (blocked) {
+          return blocked;
+        }
+        return withClient(function (ready) {
+          return ready.rpc("my_visit_stats").then(function (result) {
+            if (result.error) {
+              return { stats: null, unavailable: missingColumn(result.error), error: "לא הצלחנו לטעון את ההיסטוריה." };
+            }
+            var row = Array.isArray(result.data) ? result.data[0] : result.data;
+            return {
+              stats: {
+                visits: row && row.visits ? Number(row.visits) : 0,
+                mensHaircuts: row && row.mens_haircuts ? Number(row.mens_haircuts) : 0,
+                kidsHaircuts: row && row.kids_haircuts ? Number(row.kids_haircuts) : 0,
+                beards: row && row.beards ? Number(row.beards) : 0
+              },
+              error: ""
+            };
+          });
+        }).catch(function () {
+          return { stats: null, error: "לא הצלחנו לטעון את ההיסטוריה." };
+        });
+      });
+    },
+    visitOutcomes: function () {
+      if (!isAdminPage()) {
+        return Promise.resolve({ outcomes: {}, error: "" });
+      }
+      return withClient(function (ready) {
+        return ready.from("visit_outcomes").select("order_id, outcome").then(function (result) {
+          var outcomes = {};
+          if (result.error) {
+            return { outcomes: {}, unavailable: missingColumn(result.error) || String(result.error.code || "") === "42P01", error: messageFor(result.error) };
+          }
+          (result.data || []).forEach(function (row) {
+            if (row && row.order_id) {
+              outcomes[row.order_id] = row.outcome;
+            }
+          });
+          return { outcomes: outcomes, error: "" };
+        });
+      }).catch(function () {
+        return { outcomes: {}, error: "לא הצלחנו לטעון את סימוני הביקורים." };
+      });
+    },
+    setVisitOutcome: function (id, outcome) {
+      if (!isAdminPage()) {
+        return Promise.resolve({ error: adminOnCustomerPage });
+      }
+      return withClient(function (ready) {
+        return ready.rpc("set_visit_outcome", { p_id: id, p_outcome: outcome || null }).then(function (result) {
+          if (!result.error) {
+            return { outcome: result.data || "", error: "" };
+          }
+          var text = String(result.error.message || "");
+          if (text.indexOf("visit not started") !== -1) {
+            return { error: "אפשר לסמן ביקור רק אחרי שעת התור." };
+          }
+          if (text.indexOf("visit not approved") !== -1) {
+            return { error: "אפשר לסמן רק תור מאושר." };
+          }
+          return { error: messageFor(result.error) };
+        });
+      }).catch(function () {
+        return { error: "לא הצלחנו לשמור את הסימון. נסו שוב בעוד רגע." };
       });
     },
     hiddenOrderIds: function () {

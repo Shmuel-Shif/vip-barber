@@ -277,6 +277,9 @@
   var cancelId = "";
   var deleteId = "";
   var hiddenIds = {};
+  var visitOutcomes = {};
+  var outcomesReady = false;
+  var outcomeNames = { completed: "הושלם", no_show: "לא הגיע" };
 
   function each(list, fn) {
     Array.prototype.forEach.call(list, fn);
@@ -452,18 +455,34 @@
       }
       return found.priceIls;
     }
+    // Server orders show only the price saved when the order was created, never today's price.
+    var saved = order.server ? (order.prices || {}) : null;
+    var missing = false;
+    function priceFor(key, id) {
+      if (!saved) {
+        return price(id);
+      }
+      if (typeof saved[key] !== "number") {
+        missing = true;
+        return null;
+      }
+      return saved[key];
+    }
     var parts = [];
     if (order.adults) {
-      var adultPrice = price("mens-haircut");
+      var adultPrice = priceFor("adults", "mens-haircut");
       parts.push(order.adults + " תספורת גברים" + (adultPrice === null ? "" : " (" + (order.adults * adultPrice) + " ₪)"));
     }
     if (order.children) {
-      var childPrice = price("kids-haircut");
+      var childPrice = priceFor("children", "kids-haircut");
       parts.push(order.children + " תספורת ילדים" + (childPrice === null ? "" : " (" + (order.children * childPrice) + " ₪)"));
     }
     if (order.beards) {
-      var beardPrice = price("beard");
+      var beardPrice = priceFor("beards", "beard");
       parts.push(order.beards + " סידור זקן" + (beardPrice === null ? "" : " (" + (order.beards * beardPrice) + " ₪)"));
+    }
+    if (missing) {
+      parts.push("המחיר בזמן ההזמנה לא נשמר");
     }
     return parts.join(" · ") || "לא צוינו שירותים";
   }
@@ -1011,6 +1030,9 @@
     addDetail(parent, "קוד כניסה", customer.entryCode);
     addDetail(parent, "הערות", customer.notes);
     addDetail(parent, "תשלום", customer.payment && paymentNames[customer.payment]);
+    if (outcomesReady && order.status === "approved") {
+      addDetail(parent, "ביקור", outcomeNames[visitOutcomes[order.id]] || (visitStarted(order) ? "עדיין לא סומן" : ""));
+    }
     if (order.cancelledBy === "customer") {
       addDetail(parent, "ביטול", "בוטל על ידי הלקוח.");
     }
@@ -1104,6 +1126,9 @@
       return row;
     }
     if (order.status === "approved") {
+      if (canMarkVisit(order)) {
+        appendOutcomeButtons(row, order);
+      }
       var cancel = document.createElement("button");
       cancel.type = "button";
       cancel.className = "btn btn--ghost";
@@ -1115,6 +1140,46 @@
       return row;
     }
     return null;
+  }
+
+  function visitStarted(order) {
+    if (!order.date || !order.time) {
+      return false;
+    }
+    var start = new Date(order.date + "T" + order.time + ":00");
+    return !isNaN(start.getTime()) && start.getTime() <= Date.now();
+  }
+
+  function canMarkVisit(order) {
+    return serverMode && outcomesReady && order.server && order.status === "approved" && visitStarted(order);
+  }
+
+  function appendOutcomeButtons(row, order) {
+    var chosen = visitOutcomes[order.id] || "";
+    [["completed", "הושלם"], ["no_show", "לא הגיע"]].forEach(function (pair) {
+      var button = document.createElement("button");
+      var active = chosen === pair[0];
+      button.type = "button";
+      button.className = active ? "btn btn--gold" : "btn btn--ghost";
+      button.textContent = pair[1];
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+      button.addEventListener("click", function () {
+        var next = active ? null : pair[0];
+        applyOrderAction(function () {
+          return window.VIP_SUPABASE.setVisitOutcome(order.id, next).then(function (result) {
+            if (result && !result.error) {
+              if (next) {
+                visitOutcomes[order.id] = next;
+              } else {
+                delete visitOutcomes[order.id];
+              }
+            }
+            return result;
+          });
+        }, "", next ? "הביקור סומן: " + pair[1] + "." : "הסימון הוסר.");
+      });
+      row.appendChild(button);
+    });
   }
 
   function deleteMark(order) {
@@ -1359,12 +1424,32 @@
     hiddenIds = next;
   }
 
+  // Until 0017 runs there is no outcomes table; the buttons stay hidden and nothing else changes.
+  function loadVisitOutcomes() {
+    var auth = window.VIP_SUPABASE;
+    if (!auth || !auth.visitOutcomes) {
+      outcomesReady = false;
+      return Promise.resolve();
+    }
+    return auth.visitOutcomes().then(function (result) {
+      outcomesReady = !!(result && !result.error);
+      visitOutcomes = outcomesReady ? result.outcomes : {};
+    }).catch(function () {
+      outcomesReady = false;
+    });
+  }
+
   function loadHiddenIds() {
     var auth = window.VIP_SUPABASE;
     if (!auth || !auth.hiddenOrderIds) {
       return Promise.resolve({ error: "לא הצלחנו לטעון את התורים המוסתרים." });
     }
+    var outcomes = loadVisitOutcomes();
     return auth.hiddenOrderIds().then(function (result) {
+      return outcomes.then(function () {
+        return result;
+      });
+    }).then(function (result) {
       if (!result || result.error) {
         return { error: result && result.error ? result.error : "לא הצלחנו לטעון את התורים המוסתרים." };
       }
