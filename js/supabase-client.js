@@ -534,6 +534,35 @@
     }).join("");
   }
 
+  var entranceBucket = "entrance-photos";
+  var entranceFailed = "לא הצלחנו להעלות את תמונת הכניסה. נסו שוב, או חזרו לשלב הקודם והסירו את התמונה כדי לשלוח בלי תמונה.";
+  var entranceUpload = null;
+  var entranceUrls = {};
+
+  function jpegBlob(dataUrl) {
+    var match = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
+    if (!match) {
+      return null;
+    }
+    try {
+      var binary = window.atob(match[1]);
+      var bytes = new Uint8Array(binary.length);
+      for (var index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      return new Blob([bytes], { type: "image/jpeg" });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Until 0018 runs there is no bucket and no stage_order_photo; orders go out without the photo, as before.
+  function entranceSetupMissing(error) {
+    var code = String((error && error.code) || "");
+    var text = String((error && (error.message || error.error)) || "");
+    return code === "PGRST202" || code === "42883" || /bucket not found|could not find the function/i.test(text);
+  }
+
   function mapOrder(row) {
     var time = row && row.appointment_time ? String(row.appointment_time) : "";
     if (time.length >= 5) {
@@ -556,6 +585,7 @@
         beards: typeof row.beard_price_ils === "number" ? row.beard_price_ils : null
       },
       photo: "",
+      photoPath: row.photo_path ? String(row.photo_path) : "",
       customer: {
         fullName: row.full_name || "",
         phone: row.phone || "",
@@ -1057,7 +1087,7 @@
           return blocked;
         }
         return withClient(function (ready) {
-        var columns = "id, customer_id, status, adults, children, beards, appointment_date, appointment_time, full_name, phone, city, street, house_number, entrance, floor, apartment, entry_code, notes, payment";
+        var columns = "id, customer_id, status, adults, children, beards, appointment_date, appointment_time, full_name, phone, city, street, house_number, entrance, floor, apartment, entry_code, notes, payment, photo_path";
         function load(withPrices) {
           return ready.from("orders").select(withPrices ? columns + ", adult_price_ils, child_price_ils, beard_price_ils" : columns).order("created_at", { ascending: false });
         }
@@ -1385,6 +1415,77 @@
       }).catch(function () {
         return { url: "", error: "לא הצלחנו להציג את התמונה." };
       });
+    },
+    uploadEntrancePhoto: function (dataUrl, holdId) {
+      var blob = jpegBlob(dataUrl);
+      var hold = String(holdId || "").toLowerCase();
+      if (isAdminPage() || !blob || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(hold)) {
+        return Promise.resolve({ ok: false, path: "", error: entranceFailed });
+      }
+      return withClient(function (ready) {
+        return ready.auth.getSession().then(function (result) {
+          var session = result && result.data ? result.data.session : null;
+          if (!session || !session.user || !ready.storage) {
+            return { ok: false, path: "", error: "כדי לצרף תמונה צריך להתחבר." };
+          }
+          var user = session.user.id;
+          var reuse = !!entranceUpload && entranceUpload.user === user && entranceUpload.hold === hold && entranceUpload.source === dataUrl;
+          var path = reuse ? entranceUpload.path : user + "/" + hold + "/entrance-" + randomHex(16) + ".jpg";
+          var sent = reuse
+            ? Promise.resolve({ error: null })
+            : ready.storage.from(entranceBucket).upload(path, blob, { contentType: "image/jpeg", upsert: false });
+          return sent.then(function (uploaded) {
+            if (uploaded.error) {
+              return entranceSetupMissing(uploaded.error)
+                ? { ok: false, unavailable: true, path: "", error: "" }
+                : { ok: false, path: "", error: entranceFailed };
+            }
+            entranceUpload = { user: user, hold: hold, source: dataUrl, path: path };
+            return ready.rpc("stage_order_photo", { p_hold: hold, p_path: path }).then(function (staged) {
+              if (staged.error) {
+                if (entranceSetupMissing(staged.error)) {
+                  return { ok: false, unavailable: true, path: "", error: "" };
+                }
+                return {
+                  ok: false,
+                  path: "",
+                  error: String(staged.error.message || "").indexOf("hold expired") !== -1 ? messageFor(staged.error) : entranceFailed
+                };
+              }
+              return { ok: true, path: path, error: "" };
+            });
+          });
+        });
+      }).catch(function () {
+        return { ok: false, path: "", error: entranceFailed };
+      });
+    },
+    entrancePhotoUrl: function (path) {
+      if (!isAdminPage() || !path) {
+        return Promise.resolve({ url: "", error: "" });
+      }
+      var cached = entranceUrls[path];
+      if (cached && cached.until > Date.now()) {
+        return Promise.resolve({ url: cached.url, error: "" });
+      }
+      return withClient(function (ready) {
+        if (!ready.storage) {
+          return { url: "", error: "לא הצלחנו לטעון את התמונה." };
+        }
+        return ready.storage.from(entranceBucket).createSignedUrl(path, 600).then(function (signed) {
+          var url = signed && !signed.error && signed.data ? signed.data.signedUrl || signed.data.signedURL || "" : "";
+          if (!url) {
+            return { url: "", error: "לא הצלחנו לטעון את התמונה." };
+          }
+          entranceUrls[path] = { url: url, until: Date.now() + 8 * 60 * 1000 };
+          return { url: url, error: "" };
+        });
+      }).catch(function () {
+        return { url: "", error: "לא הצלחנו לטעון את התמונה." };
+      });
+    },
+    forgetEntrancePhotoUrl: function (path) {
+      delete entranceUrls[path];
     },
     myVisitStats: function () {
       return blockAdminCustomer({ stats: null, error: adminOnCustomerPage }).then(function (blocked) {

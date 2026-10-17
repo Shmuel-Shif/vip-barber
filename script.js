@@ -2578,6 +2578,27 @@
       } catch (error) {
         photo = "";
       }
+      function sendRequest() {
+        return auth.requestAppointment({
+          adults: draft.adults,
+          children: draft.children,
+          beards: draft.beards,
+          date: draft.date,
+          time: draft.time,
+          fullName: customer.fullName,
+          phone: customer.phone,
+          city: customer.city,
+          street: customer.street,
+          houseNumber: customer.houseNumber,
+          entrance: customer.entrance,
+          floor: customer.floor,
+          apartment: customer.apartment,
+          entryCode: customer.entryCode,
+          notes: customer.notes,
+          payment: customer.payment,
+          holdId: activeHoldId
+        });
+      }
       return auth.whenReady().then(function (ready) {
         if (!ready) {
           return { id: "", error: "אין חיבור כרגע. נסו שוב בעוד רגע." };
@@ -2600,25 +2621,17 @@
           }
           return { id: "", skipped: true };
         }
-        return auth.requestAppointment({
-          adults: draft.adults,
-          children: draft.children,
-          beards: draft.beards,
-          date: draft.date,
-          time: draft.time,
-          fullName: customer.fullName,
-          phone: customer.phone,
-          city: customer.city,
-          street: customer.street,
-          houseNumber: customer.houseNumber,
-          entrance: customer.entrance,
-          floor: customer.floor,
-          apartment: customer.apartment,
-          entryCode: customer.entryCode,
-          notes: customer.notes,
-          payment: customer.payment,
-          holdId: activeHoldId
-        });
+        if (photo && auth.uploadEntrancePhoto) {
+          saySend("מעלה את תמונת הכניסה…");
+          return auth.uploadEntrancePhoto(photo, activeHoldId).then(function (uploaded) {
+            if (uploaded && (uploaded.ok || uploaded.unavailable)) {
+              saySend("שולח את הבקשה…");
+              return sendRequest();
+            }
+            return { id: "", error: uploaded && uploaded.error ? uploaded.error : "לא הצלחנו להעלות את תמונת הכניסה. נסו שוב." };
+          });
+        }
+        return sendRequest();
       });
     }).then(function (result) {
       if (result && result.skipped) {

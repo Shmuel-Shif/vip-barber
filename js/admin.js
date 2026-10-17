@@ -1038,6 +1038,65 @@
     }
   }
 
+  function appendEntrancePhoto(parent, order) {
+    var figure = document.createElement("figure");
+    var note = document.createElement("p");
+    figure.className = "admin-entrance-photo";
+    note.className = "admin-entrance-photo__note";
+    note.setAttribute("role", "status");
+    figure.appendChild(note);
+    parent.appendChild(figure);
+    if (!order.server) {
+      if (order.photo) {
+        var local = document.createElement("img");
+        local.src = order.photo;
+        local.alt = "תמונת הכניסה לבניין";
+        figure.insertBefore(local, note);
+      } else {
+        figure.remove();
+      }
+      return;
+    }
+    if (!order.photoPath) {
+      note.textContent = "לא צורפה תמונה של הכניסה לבניין.";
+      return;
+    }
+    var auth = window.VIP_SUPABASE;
+    if (!auth || !auth.entrancePhotoUrl) {
+      note.textContent = "לא הצלחנו לטעון את התמונה.";
+      return;
+    }
+    note.textContent = "טוען את תמונת הכניסה…";
+    auth.entrancePhotoUrl(order.photoPath).then(function (signed) {
+      if (!signed || !signed.url) {
+        note.textContent = signed && signed.error ? signed.error : "לא הצלחנו לטעון את התמונה.";
+        return;
+      }
+      var image = document.createElement("img");
+      var open = document.createElement("a");
+      image.alt = "תמונת הכניסה לבניין של " + ((order.customer && order.customer.fullName) || "הלקוח");
+      image.addEventListener("load", function () {
+        note.textContent = "";
+      });
+      image.addEventListener("error", function () {
+        if (auth.forgetEntrancePhotoUrl) {
+          auth.forgetEntrancePhotoUrl(order.photoPath);
+        }
+        image.remove();
+        open.remove();
+        note.textContent = "לא הצלחנו לטעון את התמונה. סגרו ופתחו את ההזמנה כדי לנסות שוב.";
+      });
+      image.src = signed.url;
+      open.className = "btn btn--ghost admin-entrance-photo__open";
+      open.href = signed.url;
+      open.target = "_blank";
+      open.rel = "noopener";
+      open.textContent = "פתיחה בגודל מלא";
+      figure.insertBefore(image, note);
+      figure.appendChild(open);
+    });
+  }
+
   function compactCard(order, actions, mode) {
     var customer = order.customer || {};
     var card = document.createElement("article");
@@ -1082,11 +1141,8 @@
     body.className = "admin-compact__body";
     body.hidden = !expanded;
     fillDetails(body, order);
-    if (order.photo && expanded) {
-      var image = document.createElement("img");
-      image.src = order.photo;
-      image.alt = "תמונת הכניסה לבניין";
-      body.appendChild(image);
+    if (expanded) {
+      appendEntrancePhoto(body, order);
     }
     card.appendChild(toggle);
     if (actions && expanded) {

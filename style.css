@@ -3154,6 +3154,22 @@ body.admin .admin-compact img {
   border-radius: 0.7rem;
 }
 
+body.admin .admin-entrance-photo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0;
+}
+
+body.admin .admin-entrance-photo__note:empty {
+  display: none;
+}
+
+body.admin .admin-entrance-photo__open {
+  min-height: 2.75rem;
+}
+
 @media (min-width: 720px) {
   body.admin .admin-nav {
     flex-wrap: wrap;
