@@ -16,12 +16,6 @@
   var cancelButton = document.getElementById("profile-cancel");
   var formStatus = document.getElementById("profile-form-status");
   var phoneError = document.getElementById("profile-phone-error");
-  var photoImage = document.getElementById("profile-photo-image");
-  var photoEmpty = document.getElementById("profile-photo-empty");
-  var photoPick = document.getElementById("profile-photo-pick");
-  var photoClear = document.getElementById("profile-photo-clear");
-  var photoInput = document.getElementById("profile-photo-input");
-  var photoStatus = document.getElementById("profile-photo-status");
   var statsNote = document.getElementById("profile-stats-note");
   var inputs = {
     firstName: document.getElementById("profile-first-name"),
@@ -89,28 +83,6 @@
     };
   }
 
-  function showPhoto(path) {
-    photoPick.textContent = path ? "החלפת תמונה" : "העלאת תמונה";
-    photoClear.hidden = !path;
-    if (!path) {
-      photoImage.hidden = true;
-      photoImage.removeAttribute("src");
-      photoEmpty.hidden = false;
-      return;
-    }
-    auth.avatarUrl(path).then(function (result) {
-      if (!result || !result.url || !current || current.photoPath !== path) {
-        if (result && result.error) {
-          say(photoStatus, result.error);
-        }
-        return;
-      }
-      photoImage.src = result.url;
-      photoImage.hidden = false;
-      photoEmpty.hidden = true;
-    });
-  }
-
   function loadStats() {
     if (!auth.myVisitStats) {
       return;
@@ -154,15 +126,12 @@
       setEditing(false);
       if (!result.ready) {
         editButton.disabled = true;
-        photoPick.disabled = true;
         say(status, "עריכת הפרופיל תהיה זמינה בקרוב.");
       } else {
         editButton.disabled = false;
-        photoPick.disabled = false;
         var named = current.firstName || current.lastName || current.fullName;
         say(status, named ? "" : "כדאי להשלים את הפרטים, כדי שלא תצטרכו להקליד אותם בכל הזמנה.");
       }
-      showPhoto(current.photoPath);
       loadStats();
     }).catch(function () {
       if (generation === loadGeneration) {
@@ -219,102 +188,6 @@
       busy = false;
       saveButton.disabled = false;
       say(formStatus, "לא הצלחנו לשמור את הפרטים. נסו שוב בעוד רגע.");
-    });
-  });
-
-  // Resized on the device to a small JPEG before upload.
-  function shrink(file) {
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onerror = reject;
-      reader.onload = function () {
-        var image = new Image();
-        image.onerror = reject;
-        image.onload = function () {
-          var side = 512;
-          var scale = Math.min(1, side / Math.max(image.width, image.height));
-          var canvas = document.createElement("canvas");
-          canvas.width = Math.max(1, Math.round(image.width * scale));
-          canvas.height = Math.max(1, Math.round(image.height * scale));
-          var context = canvas.getContext("2d");
-          if (!context || !canvas.toBlob) {
-            reject(new Error("canvas"));
-            return;
-          }
-          context.drawImage(image, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob(function (blob) {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error("blob"));
-            }
-          }, "image/jpeg", 0.82);
-        };
-        image.src = reader.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  photoPick.addEventListener("click", function () {
-    if (!busy) {
-      photoInput.click();
-    }
-  });
-
-  photoInput.addEventListener("change", function () {
-    var file = photoInput.files && photoInput.files[0];
-    photoInput.value = "";
-    if (!file) {
-      return;
-    }
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 15 * 1024 * 1024) {
-      say(photoStatus, "אפשר לבחור תמונה מסוג JPG, PNG או WEBP.");
-      return;
-    }
-    busy = true;
-    photoPick.disabled = true;
-    say(photoStatus, "מעלה את התמונה…");
-    shrink(file).then(function (blob) {
-      return auth.uploadAvatar(blob, "jpg");
-    }).then(function (result) {
-      busy = false;
-      photoPick.disabled = false;
-      if (!result || result.error || !result.path) {
-        say(photoStatus, result && result.error ? result.error : "לא הצלחנו להעלות את התמונה.");
-        return;
-      }
-      if (current) {
-        current.photoPath = result.path;
-      }
-      say(photoStatus, "התמונה נשמרה.");
-      showPhoto(result.path);
-    }).catch(function () {
-      busy = false;
-      photoPick.disabled = false;
-      say(photoStatus, "לא הצלחנו לקרוא את התמונה. נסו תמונה אחרת.");
-    });
-  });
-
-  photoClear.addEventListener("click", function () {
-    if (busy) {
-      return;
-    }
-    busy = true;
-    photoClear.disabled = true;
-    say(photoStatus, "מסיר את התמונה…");
-    auth.removeAvatar().then(function (result) {
-      busy = false;
-      photoClear.disabled = false;
-      if (!result || result.error) {
-        say(photoStatus, result && result.error ? result.error : "לא הצלחנו להסיר את התמונה.");
-        return;
-      }
-      if (current) {
-        current.photoPath = "";
-      }
-      say(photoStatus, "התמונה הוסרה.");
-      showPhoto("");
     });
   });
 

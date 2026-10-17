@@ -1513,6 +1513,40 @@
         });
       });
     },
+    // Read-only. profiles_select_own (0002) already lets only the admin see every row.
+    registeredUsers: function () {
+      if (!isAdminPage()) {
+        return Promise.resolve({ users: [], error: "" });
+      }
+      var failed = "לא הצלחנו לטעון את רשימת הרשומים. נסו שוב בעוד רגע.";
+      return withClient(function (ready) {
+        function load(columns) {
+          return ready.from("profiles").select(columns).eq("role", "customer").order("created_at", { ascending: false });
+        }
+        return load("id, username, full_name, first_name, last_name, phone, created_at").then(function (result) {
+          return result.error && missingColumn(result.error) ? load("id, username, full_name, phone, created_at") : result;
+        }).then(function (result) {
+          if (result.error) {
+            return { users: [], error: failed };
+          }
+          return {
+            users: (result.data || []).map(function (row) {
+              var name = [row.first_name, row.last_name].filter(Boolean).join(" ") || row.full_name || "";
+              return {
+                id: row.id,
+                username: row.username || "",
+                name: name,
+                phone: row.phone || "",
+                createdAt: row.created_at || ""
+              };
+            }),
+            error: ""
+          };
+        });
+      }).catch(function () {
+        return { users: [], error: failed };
+      });
+    },
     visitOutcomes: function () {
       if (!isAdminPage()) {
         return Promise.resolve({ outcomes: {}, error: "" });

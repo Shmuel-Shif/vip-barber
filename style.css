@@ -2727,21 +2727,6 @@ body.admin #admin-app[hidden] {
   display: none !important;
 }
 
-body.admin #week-clear {
-  width: 100%;
-  margin-top: 0.7rem;
-}
-
-body.admin .admin-conflicts {
-  margin-top: 0.8rem;
-}
-
-body.admin .admin-conflicts p {
-  margin: 0.35rem 0 0;
-  color: #f3d2cb;
-  line-height: 1.45;
-}
-
 body.admin-locked .site-header {
   display: none;
 }
@@ -3170,6 +3155,26 @@ body.admin .admin-entrance-photo__open {
   min-height: 2.75rem;
 }
 
+body.admin .admin-user p,
+body.admin .admin-haircuts {
+  margin: 0.25rem 0 0;
+}
+
+body.admin .admin-user p:empty {
+  display: none;
+}
+
+body.admin .admin-user__name {
+  color: var(--ivory);
+  font-weight: 500;
+}
+
+body.admin .admin-user__meta,
+body.admin .admin-haircuts {
+  color: var(--ivory-soft);
+  font-size: 0.9rem;
+}
+
 @media (min-width: 720px) {
   body.admin .admin-nav {
     flex-wrap: wrap;
@@ -3579,8 +3584,7 @@ dialog[open],
   margin-top: 1rem;
 }
 
-.profile-actions .btn[hidden],
-.profile-photo__actions .btn[hidden] {
+.profile-actions .btn[hidden] {
   display: none;
 }
 
@@ -3590,47 +3594,6 @@ dialog[open],
   color: var(--ivory-soft);
   font-size: 0.9rem;
   text-align: center;
-}
-
-.profile-photo {
-  display: grid;
-  justify-items: center;
-  gap: 0.75rem;
-}
-
-.profile-photo__frame {
-  display: grid;
-  place-items: center;
-  width: 7rem;
-  height: 7rem;
-  overflow: hidden;
-  border: 1px solid rgba(196, 164, 106, 0.75);
-  border-radius: 50%;
-  background: #111;
-}
-
-.profile-photo__frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.profile-photo__frame img[hidden],
-.profile-photo__empty[hidden] {
-  display: none;
-}
-
-.profile-photo__empty {
-  color: var(--gold-light);
-  font-size: 1.4rem;
-  letter-spacing: 0.12em;
-}
-
-.profile-photo__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  justify-content: center;
 }
 
 .profile-stats {

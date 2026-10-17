@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Frank+Ruhl+Libre:wght@400;500&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../style.css?v=photo1">
+  <link rel="stylesheet" href="../style.css?v=admin2">
   <script>document.documentElement.classList.add("js");</script>
 </head>
 <body class="admin admin-locked">
@@ -62,9 +62,9 @@
     <div id="admin-app" hidden>
     <nav class="admin-nav" aria-label="ניווט ניהול">
       <button type="button" data-admin-panel="day">הלוז היומי שלי</button>
-      <button type="button" data-admin-panel="orders">כל ההזמנות</button>
       <button type="button" data-admin-panel="pending">ממתינות לאישור</button>
-      <button type="button" data-admin-panel="hidden">תורים מוסתרים</button>
+      <button type="button" data-admin-panel="orders">כל ההזמנות</button>
+      <button type="button" data-admin-panel="users">רשומים</button>
       <button type="button" data-admin-panel="settings">הגדרות</button>
     </nav>
 
@@ -76,19 +76,19 @@
         </button>
         <div class="admin-setcard__body" id="settings-body" hidden>
           <form id="business-form">
-            <label class="admin-field">משך שירות, בדקות
+            <label class="admin-field">זמן תספורת
               <input id="biz-service" name="service-minutes" type="number" min="10" max="180" step="5" inputmode="numeric" required>
             </label>
-            <label class="admin-field">זמן נסיעה, בדקות
+            <label class="admin-field">זמן נסיעה
               <input id="biz-travel" name="travel" type="number" min="0" max="180" step="5" inputmode="numeric" required>
             </label>
-            <label class="admin-field">מחיר תספורת גברים, בשקלים
+            <label class="admin-field">מחיר תספורת גברים
               <input data-service="mens-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
             </label>
-            <label class="admin-field">מחיר תספורת ילדים, בשקלים
+            <label class="admin-field">מחיר תספורת ילדים
               <input data-service="kids-haircut" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
             </label>
-            <label class="admin-field">מחיר סידור זקן, בשקלים
+            <label class="admin-field">מחיר סידור זקן
               <input data-service="beard" data-field="price" type="number" min="0" max="9999" step="1" inputmode="numeric" required>
             </label>
             <button type="submit" class="btn btn--gold admin-save">שמירת זמנים ומחירים</button>
@@ -112,12 +112,25 @@
             <button type="button" id="week-next">שבוע הבא</button>
           </div>
           <div id="week-days" class="admin-hours"></div>
-          <button type="button" class="btn btn--gold avail__save" id="week-save">שמירת השעות הקבועות</button>
-          <button type="button" class="btn btn--ghost" id="week-clear" hidden>ביטול השינוי החריג</button>
+          <button type="button" class="btn btn--gold avail__save" id="week-save">שמירה</button>
           <p id="week-status" class="admin-feedback" role="status"></p>
-          <div id="week-conflicts" class="admin-conflicts"></div>
         </div>
       </article>
+      <article class="admin-setcard">
+        <button type="button" class="admin-setcard__toggle" id="history-toggle" aria-expanded="false" aria-controls="history-body">
+          <span class="admin-setcard__name">היסטוריה</span>
+        </button>
+        <div class="admin-setcard__body" id="history-body" hidden>
+          <p id="hidden-feedback" class="admin-feedback" role="status"></p>
+          <div id="hidden-list"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="admin-panel" data-admin-section="users" hidden aria-labelledby="users-title">
+      <h1 id="users-title">רשומים</h1>
+      <p id="users-count" class="admin-note" role="status"></p>
+      <div id="users-list"></div>
     </section>
 
     <section class="admin-panel" data-admin-section="day" hidden aria-labelledby="day-title">
@@ -181,12 +194,6 @@
       <div id="pending-list"></div>
     </section>
 
-    <section class="admin-panel" data-admin-section="hidden" hidden aria-labelledby="hidden-title">
-      <h1 id="hidden-title">תורים מוסתרים</h1>
-      <p id="hidden-feedback" class="admin-feedback" role="status"></p>
-      <div id="hidden-list"></div>
-    </section>
-
     <noscript>
       <p class="admin-note">העמוד לא זמין כרגע.</p>
     </noscript>
@@ -201,7 +208,7 @@
   <dialog class="admin-dialog" id="admin-delete" aria-labelledby="admin-delete-title">
     <h2 id="admin-delete-title">הסתרת תור</h2>
     <p id="admin-delete-details"></p>
-    <p>התור יוסתר מרשימות הניהול. הוא יישאר אצל הלקוח, ואפשר להציג אותו שוב.</p>
+    <p>התור יוסתר מרשימות הניהול ויעבור להיסטוריה שבהגדרות. הוא יישאר אצל הלקוח, ואפשר להציג אותו שוב.</p>
     <button type="button" class="btn btn--gold" id="admin-delete-yes">כן, להסתיר</button>
     <button type="button" class="btn btn--ghost" id="admin-delete-no">ביטול</button>
   </dialog>
@@ -216,9 +223,9 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
-  <script src="../js/supabase-client.js?v=photo1"></script>
+  <script src="../js/supabase-client.js?v=admin2"></script>
   <script src="../js/demo-data.js"></script>
-  <script src="../script.js?v=photo1"></script>
-  <script src="../js/admin.js?v=photo1"></script>
+  <script src="../script.js?v=admin2"></script>
+  <script src="../js/admin.js?v=admin2"></script>
 </body>
 </html>

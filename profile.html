@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=photo1">
+  <link rel="stylesheet" href="style.css?v=admin2">
   <script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
@@ -39,19 +39,6 @@
     </section>
 
     <section id="profile-main" hidden>
-      <div class="profile-card profile-photo">
-        <div class="profile-photo__frame">
-          <img id="profile-photo-image" alt="תמונת הפרופיל שלי" hidden>
-          <span id="profile-photo-empty" class="profile-photo__empty" aria-hidden="true">VIP</span>
-        </div>
-        <div class="profile-photo__actions">
-          <button type="button" class="btn btn--ghost" id="profile-photo-pick">העלאת תמונה</button>
-          <button type="button" class="btn btn--ghost" id="profile-photo-clear" hidden>הסרת התמונה</button>
-        </div>
-        <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp" hidden>
-        <p id="profile-photo-status" class="profile-note" role="status"></p>
-      </div>
-
       <form id="profile-form" class="profile-card" novalidate>
         <h2>הפרטים שלי</h2>
         <fieldset id="profile-fields" disabled>
@@ -136,8 +123,8 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
-  <script src="js/supabase-client.js?v=photo1"></script>
-  <script src="script.js?v=photo1"></script>
-  <script src="js/profile.js?v=photo1"></script>
+  <script src="js/supabase-client.js?v=admin2"></script>
+  <script src="script.js?v=admin2"></script>
+  <script src="js/profile.js?v=admin2"></script>
 </body>
 </html>

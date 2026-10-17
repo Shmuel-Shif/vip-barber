@@ -590,8 +590,6 @@
     var label = document.getElementById("week-label");
     var scope = document.getElementById("hours-scope");
     var nav = document.getElementById("week-nav");
-    var saveButton = document.getElementById("week-save");
-    var clearButton = document.getElementById("week-clear");
     var standingButton = document.getElementById("hours-standing");
     var weekButton = document.getElementById("hours-week");
     var end = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 6);
@@ -607,15 +605,9 @@
     if (weekButton) {
       weekButton.setAttribute("aria-pressed", hoursMode === "week" ? "true" : "false");
     }
-    if (saveButton) {
-      saveButton.textContent = hoursMode === "standing" ? "שמירת השעות הקבועות" : "שמירת השינוי לשבוע הזה";
-    }
-    if (clearButton) {
-      clearButton.hidden = hoursMode !== "week" || !weekIsOverride;
-    }
     if (scope) {
       if (hoursMode === "standing") {
-        scope.textContent = "אלה שעות קבועות. שבת סגורה. הן חוזרות בכל שבוע שאין לו שינוי חריג.";
+        scope.textContent = "אלה שעות קבועות. הן חוזרות בכל שבוע שאין לו שינוי חריג.";
       } else if (weekIsOverride) {
         scope.textContent = "שינוי חריג לשבוע שנבחר. שאר השבועות נשארים לפי השעות הקבועות.";
       } else {
@@ -624,9 +616,6 @@
     }
     root.textContent = "";
     schedule.weekdays.forEach(function (day) {
-      if (hoursMode === "standing" && day.id === "6") {
-        return;
-      }
       var date = weekDate(day.id);
       var item = week[day.id];
       var open = item.status === "hours";
@@ -717,17 +706,6 @@
     return iso(date);
   }
 
-  function closeSaturday(days) {
-    days["6"] = {
-      status: "closed",
-      start: "",
-      end: "",
-      blocked: [],
-      breaks: []
-    };
-    return days;
-  }
-
   function rowsFor(weekStart, days, keepBlocked) {
     return schedule.weekdays.map(function (day) {
       var item = days[day.id];
@@ -775,11 +753,8 @@
         travelInput.value = String(schedule.travelMinutes);
       }
       loadWeek();
-      if (successText) {
-        statusNode.textContent = successText;
-      }
+      statusNode.textContent = successText || "";
       renderWeek();
-      paintConflicts();
       return true;
     }).catch(function () {
       statusNode.textContent = "לא הצלחנו לטעון את השעות. נסו שוב בעוד רגע.";
@@ -831,50 +806,10 @@
     });
   }
 
-  function paintConflicts() {
-    var box = document.getElementById("week-conflicts");
-    var ordersApi = window.VIP_ORDERS;
-    var dates = {};
-    if (!box) {
-      return;
-    }
-    box.textContent = "";
-    if (hoursMode === "week") {
-      schedule.weekdays.forEach(function (day) {
-        dates[iso(weekDate(day.id))] = true;
-      });
-    }
-    if (!ordersApi) {
-      return;
-    }
-    ordersApi.read().forEach(function (order) {
-      var date;
-      var slots;
-      if (!order || (order.status !== "pending" && order.status !== "approved") || !order.date || !order.time) {
-        return;
-      }
-      if (hoursMode === "week" && !dates[order.date]) {
-        return;
-      }
-      date = new Date(Number(order.date.slice(0, 4)), Number(order.date.slice(5, 7)) - 1, Number(order.date.slice(8, 10)));
-      slots = schedule.openSlots(date, { ignoreTaken: true, ignorePast: true });
-      if (slots.indexOf(order.time) !== -1) {
-        return;
-      }
-      if (!box.childNodes.length) {
-        paragraph(box, "התורים האלה נשארו כפי שהם ולא בוטלו, אבל הם מחוץ לשעות המעודכנות:");
-      }
-      paragraph(box, whenText(order) + " — " + ((order.customer && order.customer.fullName) || "בלי שם"));
-    });
-  }
-
   function saveWeek() {
     var statusNode = document.getElementById("week-status");
     var invalid = false;
     var stored;
-    if (hoursMode === "standing") {
-      closeSaturday(week);
-    }
     schedule.weekdays.forEach(function (day) {
       if (!dayHoursValid(week[day.id])) {
         invalid = true;
@@ -896,7 +831,6 @@
         schedule.weekdays.forEach(function (day) {
           days[day.id].blocked = [];
         });
-        closeSaturday(days);
       }
       if (!auth || !auth.saveWeeklyHours || !auth.saveWeekOverride) {
         statusNode.textContent = "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
@@ -927,7 +861,7 @@
     }
     stored = readAvailability();
     if (hoursMode === "standing") {
-      stored.standing = closeSaturday(cleanWeek());
+      stored.standing = cleanWeek();
       schedule.weekdays.forEach(function (day) {
         stored.standing[day.id].blocked = [];
       });
@@ -952,55 +886,6 @@
       statusNode.textContent = "השינוי נשמר לשבוע שנבחר. השעות הקבועות לא השתנו, והתורים הקיימים לא בוטלו.";
     }
     renderWeek();
-    paintConflicts();
-  }
-
-  function clearWeekOverride() {
-    var statusNode = document.getElementById("week-status");
-    var stored;
-    if (serverMode && !schedule.remote) {
-      statusNode.textContent = "השעות עדיין נטענות. נסו שוב בעוד רגע.";
-      return;
-    }
-    if (serverMode) {
-      var auth = window.VIP_SUPABASE;
-      var weekStart = iso(cursor);
-      if (!auth || !auth.clearWeekOverride) {
-        statusNode.textContent = "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
-        return;
-      }
-      auth.clearWeekOverride(weekStart, shiftIso(weekStart, 6)).then(function (result) {
-        if (!result || result.error) {
-          statusNode.textContent = result && result.error ? result.error : "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
-          return;
-        }
-        weekIsOverride = false;
-        reloadServerSchedule(statusNode, "השבוע חזר לשעות הקבועות. התורים הקיימים לא בוטלו.").then(function (ok) {
-          if (!ok) {
-            statusNode.textContent = "השעות נשמרו. רעננו את העמוד.";
-          }
-        });
-      }).catch(function () {
-        statusNode.textContent = "לא הצלחנו לשמור את השעות. נסו שוב בעוד רגע.";
-      });
-      return;
-    }
-    stored = readAvailability();
-    delete stored.weeks[iso(cursor)];
-    schedule.weekdays.forEach(function (day) {
-      delete stored.exceptions[iso(weekDate(day.id))];
-    });
-    try {
-      writeAvailability(stored);
-    } catch (error) {
-      statusNode.textContent = "לא הצלחנו לשמור. נסו שוב בעוד רגע.";
-      return;
-    }
-    weekIsOverride = false;
-    loadWeek();
-    statusNode.textContent = "השבוע חזר לשעות הקבועות. התורים הקיימים לא בוטלו.";
-    renderWeek();
-    paintConflicts();
   }
 
   function addDetail(parent, label, value) {
@@ -1347,9 +1232,23 @@
     });
   }
 
+  // Same rule as the customer statistics (my_visit_stats in 0017): an approved order the admin
+  // marked "הושלם". Each adult and each child is one haircut; beards are not haircuts.
+  function completedHaircuts() {
+    var counts = {};
+    ordersApi.read().forEach(function (order) {
+      if (!order || !order.customerId || order.status !== "approved" || visitOutcomes[order.id] !== "completed") {
+        return;
+      }
+      counts[order.customerId] = (counts[order.customerId] || 0) + (Number(order.adults) || 0) + (Number(order.children) || 0);
+    });
+    return counts;
+  }
+
   function paintHidden() {
     var list = document.getElementById("hidden-list");
     var items;
+    var haircuts;
     if (!list) {
       return;
     }
@@ -1358,12 +1257,16 @@
     });
     list.textContent = "";
     if (!items.length) {
-      paragraph(list, "אין תורים מוסתרים.", "orders-empty");
+      paragraph(list, "אין תורים בהיסטוריה.", "orders-empty");
       return;
     }
+    haircuts = outcomesReady ? completedHaircuts() : null;
     items.forEach(function (order) {
       var card = compactCard(order, null, "hidden");
       var actions = document.createElement("div");
+      if (haircuts && order.customerId) {
+        paragraph(card, "תספורות שהושלמו ללקוח: " + (haircuts[order.customerId] || 0), "admin-haircuts");
+      }
       var button = document.createElement("button");
       actions.className = "admin-actions";
       button.type = "button";
@@ -1375,6 +1278,64 @@
       actions.appendChild(button);
       card.appendChild(actions);
       list.appendChild(card);
+    });
+  }
+
+  var usersGeneration = 0;
+
+  function joinedText(value) {
+    var date = new Date(value);
+    if (!value || isNaN(date.getTime())) {
+      return "";
+    }
+    return "נרשם ב־" + date.getDate() + " ב" + months[date.getMonth()] + " " + date.getFullYear();
+  }
+
+  function paintUsers(users) {
+    var list = document.getElementById("users-list");
+    var count = document.getElementById("users-count");
+    if (!list || !count) {
+      return;
+    }
+    list.textContent = "";
+    count.textContent = users.length === 1 ? "משתמש רשום אחד באתר." : users.length + " משתמשים רשומים באתר.";
+    if (!users.length) {
+      paragraph(list, "עדיין אין משתמשים רשומים.", "orders-empty");
+      return;
+    }
+    users.forEach(function (user) {
+      var card = document.createElement("article");
+      card.className = "admin-compact admin-user";
+      paragraph(card, user.name || "ללא שם", "admin-user__name");
+      paragraph(card, [user.username ? "שם משתמש: " + user.username : "", user.phone].filter(Boolean).join(" · "), "admin-user__meta");
+      paragraph(card, joinedText(user.createdAt), "admin-user__meta");
+      list.appendChild(card);
+    });
+  }
+
+  function loadUsers() {
+    var list = document.getElementById("users-list");
+    var count = document.getElementById("users-count");
+    var auth = window.VIP_SUPABASE;
+    var generation = ++usersGeneration;
+    if (!list || !count) {
+      return;
+    }
+    list.textContent = "";
+    if (!serverMode || !auth || !auth.registeredUsers) {
+      count.textContent = "רשימת הרשומים זמינה רק אחרי התחברות למערכת.";
+      return;
+    }
+    count.textContent = "טוען את הרשומים…";
+    auth.registeredUsers().then(function (result) {
+      if (generation !== usersGeneration) {
+        return;
+      }
+      if (!result || result.error) {
+        count.textContent = result && result.error ? result.error : "לא הצלחנו לטעון את רשימת הרשומים. נסו שוב בעוד רגע.";
+        return;
+      }
+      paintUsers(result.users || []);
     });
   }
 
@@ -1617,10 +1578,34 @@
     }
   }
 
+  function closeOtherCards(keep) {
+    each(document.querySelectorAll(".admin-setcard__toggle"), function (toggle) {
+      var body = document.getElementById(toggle.getAttribute("aria-controls"));
+      if (toggle === keep || !body) {
+        return;
+      }
+      body.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function openHistory() {
+    var body = document.getElementById("history-body");
+    var toggle = document.getElementById("history-toggle");
+    closeOtherCards(toggle);
+    if (body) {
+      body.hidden = false;
+    }
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", "true");
+    }
+  }
+
   function showPanel(name) {
     var aliases = { dashboard: "day", requests: "pending", calendar: "hours", approved: "orders" };
-    var panels = { day: true, orders: true, pending: true, hidden: true, settings: true };
-    if (name === "hours" || name === "calendar") {
+    var panels = { day: true, orders: true, pending: true, users: true, settings: true };
+    var history = name === "hidden" || name === "history";
+    if (name === "hours" || name === "calendar" || history) {
       name = "settings";
     }
     if (aliases[name]) {
@@ -1641,12 +1626,18 @@
     });
     if (name === "settings") {
       renderWeek();
+      if (history) {
+        openHistory();
+      }
     }
-    if (name === "day" || name === "orders" || name === "pending" || name === "hidden") {
+    if (name === "users") {
+      loadUsers();
+    }
+    if (name === "day" || name === "orders" || name === "pending" || name === "settings") {
       refreshLists();
     }
     try {
-      history.replaceState(null, "", "#" + name);
+      window.history.replaceState(null, "", "#" + name);
     } catch (error) {
       window.location.hash = name;
     }
@@ -1746,13 +1737,11 @@
     renderWeek();
   });
   document.getElementById("week-save").addEventListener("click", saveWeek);
-  document.getElementById("week-clear").addEventListener("click", clearWeekOverride);
   document.getElementById("hours-standing").addEventListener("click", function () {
     hoursMode = "standing";
     openDay = "";
     loadWeek();
     document.getElementById("week-status").textContent = "";
-    document.getElementById("week-conflicts").textContent = "";
     renderWeek();
   });
   document.getElementById("hours-week").addEventListener("click", function () {
@@ -1760,7 +1749,6 @@
     openDay = "";
     loadWeek();
     document.getElementById("week-status").textContent = "";
-    document.getElementById("week-conflicts").textContent = "";
     renderWeek();
   });
   document.getElementById("day-prev").addEventListener("click", function () {
@@ -1906,12 +1894,30 @@
   document.getElementById("settings-toggle").addEventListener("click", function () {
     var body = document.getElementById("settings-body");
     var open = body.hidden;
+    if (open) {
+      closeOtherCards(this);
+    }
     body.hidden = !open;
     this.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.getElementById("history-toggle").addEventListener("click", function () {
+    var body = document.getElementById("history-body");
+    var open = body.hidden;
+    if (open) {
+      closeOtherCards(this);
+    }
+    body.hidden = !open;
+    this.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      paintHidden();
+    }
   });
   document.getElementById("hours-toggle").addEventListener("click", function () {
     var body = document.getElementById("hours-body");
     var open = body.hidden;
+    if (open) {
+      closeOtherCards(this);
+    }
     body.hidden = !open;
     this.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
@@ -1926,7 +1932,7 @@
     var invalid = false;
     event.preventDefault();
     if (!(serviceMinutes >= 10 && serviceMinutes <= 180) || serviceMinutes !== Math.round(serviceMinutes)) {
-      message.textContent = "משך השירות צריך להיות בין 10 ל־180 דקות.";
+      message.textContent = "זמן התספורת צריך להיות בין 10 ל־180 דקות.";
       return;
     }
     if (!(travel >= 0 && travel <= 180) || travel !== Math.round(travel)) {
