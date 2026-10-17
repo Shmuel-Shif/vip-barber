@@ -16,7 +16,6 @@
   var cancelButton = document.getElementById("profile-cancel");
   var formStatus = document.getElementById("profile-form-status");
   var phoneError = document.getElementById("profile-phone-error");
-  var statsNote = document.getElementById("profile-stats-note");
   var inputs = {
     firstName: document.getElementById("profile-first-name"),
     lastName: document.getElementById("profile-last-name"),
@@ -83,23 +82,6 @@
     };
   }
 
-  function loadStats() {
-    if (!auth.myVisitStats) {
-      return;
-    }
-    auth.myVisitStats().then(function (result) {
-      var stats = result && result.stats;
-      if (!stats) {
-        say(statsNote, result && result.unavailable ? "ההיסטוריה תהיה זמינה בקרוב." : (result && result.error) || "");
-        return;
-      }
-      say(document.getElementById("stat-mens"), String(stats.mensHaircuts));
-      say(document.getElementById("stat-kids"), String(stats.kidsHaircuts));
-      say(document.getElementById("stat-beards"), String(stats.beards));
-      say(statsNote, stats.visits ? "נספרים רק ביקורים שהושלמו." : "עדיין אין לך תורים שהושלמו.");
-    });
-  }
-
   function load() {
     var generation = ++loadGeneration;
     say(status, "טוען את הפרטים…");
@@ -132,7 +114,6 @@
         var named = current.firstName || current.lastName || current.fullName;
         say(status, named ? "" : "כדאי להשלים את הפרטים, כדי שלא תצטרכו להקליד אותם בכל הזמנה.");
       }
-      loadStats();
     }).catch(function () {
       if (generation === loadGeneration) {
         say(status, "לא הצלחנו לטעון את הפרופיל. נסו שוב בעוד רגע.");

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="הסטטיסטיקה שלי ב־VIP.">
+  <title>הסטטיסטיקה שלי — זאבי הנאו - VIP</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="style.css?v=stats1">
+  <script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">דלג לתוכן</a>
+  <header class="site-header">
+    <a class="brand" href="index.html" aria-label="VIP, דף הבית">
+      <img src="assets/logo/logo.png" alt="" width="1090" height="1183">
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="פתיחת תפריט">
+      <span class="hamburger" aria-hidden="true"></span>
+    </button>
+    <nav id="site-nav" class="site-nav" aria-label="ניווט ראשי">
+      <a href="index.html">בית</a>
+      <a href="booking.html">קבע תור</a>
+      <a href="orders.html">ההזמנות שלי</a>
+      <a href="stats.html" aria-current="page">סטטיסטיקה</a>
+      <a href="profile.html">פרופיל</a>
+    </nav>
+  </header>
+  <main id="content" class="page orders-page profile-page">
+    <h1>הסטטיסטיקה שלי</h1>
+    <p id="stats-status" class="orders-note" role="status">טוען את הנתונים…</p>
+
+    <section id="stats-signed-out" class="profile-card" hidden>
+      <p>כדי לראות את הסטטיסטיקה צריך להתחבר.</p>
+      <button type="button" class="btn btn--gold" id="stats-login">התחברות</button>
+    </section>
+
+    <section id="stats-main" class="profile-card" hidden aria-label="הסטטיסטיקה שלי">
+      <dl class="profile-stats">
+        <div><dt>תספורות גברים</dt><dd id="stat-mens">0</dd></div>
+        <div><dt>תספורות ילדים</dt><dd id="stat-kids">0</dd></div>
+        <div><dt>סידורי זקן</dt><dd id="stat-beards">0</dd></div>
+      </dl>
+      <p id="stats-note" class="profile-note" role="status"></p>
+    </section>
+  </main>
+  <div class="notify-prompt" id="notify-prompt" hidden>
+    <div class="notify-prompt__card" role="dialog" aria-modal="true" aria-labelledby="notify-title">
+      <h2 id="notify-title">אל תפספס את עדכון התור שלך</h2>
+      <p id="notify-text">הפעל התראות מ־VIP וקבל עדכון כשהתור שלך מאושר או כשיש שינוי בהזמנה.</p>
+      <div class="notify-prompt__actions">
+        <button type="button" class="btn btn--gold" id="notify-yes">הפעלת התראות</button>
+        <button type="button" class="btn btn--ghost" id="notify-later">אולי מאוחר יותר</button>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
+  <script src="js/supabase-client.js?v=stats1"></script>
+  <script src="script.js?v=stats1"></script>
+  <script src="js/stats.js?v=stats1"></script>
+</body>
+</html>

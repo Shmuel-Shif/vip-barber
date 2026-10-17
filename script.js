@@ -2716,7 +2716,7 @@
 
   var steps = ["booking.html", "booking-next.html", "booking-details.html", "booking-summary.html"];
   var file = window.location.pathname.split("/").pop();
-  if (!file || file === "index.html" || file === "orders.html" || file === "profile.html") {
+  if (!file || file === "index.html" || file === "orders.html" || file === "profile.html" || file === "stats.html") {
     return;
   }
   var current = file === "booking-wait.html" ? steps.length - 1 : steps.indexOf(file);

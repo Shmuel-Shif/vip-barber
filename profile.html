@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=admin2">
+  <link rel="stylesheet" href="style.css?v=stats1">
   <script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
@@ -26,6 +26,7 @@
       <a href="index.html">בית</a>
       <a href="booking.html">קבע תור</a>
       <a href="orders.html">ההזמנות שלי</a>
+      <a href="stats.html">סטטיסטיקה</a>
       <a href="profile.html" aria-current="page">פרופיל</a>
     </nav>
   </header>
@@ -100,16 +101,6 @@
         </div>
         <p id="profile-form-status" class="profile-note" role="status"></p>
       </form>
-
-      <section class="profile-card" aria-labelledby="profile-stats-title">
-        <h2 id="profile-stats-title">הסטטיסטיקה שלי</h2>
-        <dl class="profile-stats">
-          <div><dt>תספורות גברים</dt><dd id="stat-mens">0</dd></div>
-          <div><dt>תספורות ילדים</dt><dd id="stat-kids">0</dd></div>
-          <div><dt>סידורי זקן</dt><dd id="stat-beards">0</dd></div>
-        </dl>
-        <p id="profile-stats-note" class="profile-note" role="status"></p>
-      </section>
     </section>
   </main>
   <div class="notify-prompt" id="notify-prompt" hidden>
@@ -123,8 +114,8 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
-  <script src="js/supabase-client.js?v=admin2"></script>
-  <script src="script.js?v=admin2"></script>
-  <script src="js/profile.js?v=admin2"></script>
+  <script src="js/supabase-client.js?v=stats1"></script>
+  <script src="script.js?v=stats1"></script>
+  <script src="js/profile.js?v=stats1"></script>
 </body>
 </html>
