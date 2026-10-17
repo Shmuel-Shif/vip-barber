@@ -1211,6 +1211,10 @@ body.nav-open {
     z-index: 2;
     transform: translate(-50%, -50%);
   }
+
+  .site-nav a {
+    white-space: nowrap;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
